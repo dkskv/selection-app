@@ -10,6 +10,18 @@ export default defineConfig([
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, tseslint.configs.recommended],
+    rules: {
+      'padding-line-between-statements': [
+        'error',
+        { blankLine: 'always', prev: '*', next: '*' },
+        { blankLine: 'any', prev: 'import', next: 'import' },
+        {
+          blankLine: 'any',
+          prev: ['singleline-const', 'singleline-let', 'singleline-var'],
+          next: ['singleline-const', 'singleline-let', 'singleline-var'],
+        },
+      ],
+    },
   },
   {
     files: ['frontend/src/**/*.{ts,tsx}'],
