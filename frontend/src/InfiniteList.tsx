@@ -6,7 +6,7 @@ import {
   type GetNextPageParamFunction,
 } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Spin } from 'antd';
+import { LoaderRow } from './LoaderRow';
 
 export type InfiniteListProps<TPage, TItem, TPageParam> = {
   queryKey: QueryKey;
@@ -50,10 +50,12 @@ export function InfiniteList<TPage, TItem, TPageParam>({
     });
 
   const items = data?.pages.flatMap(getItems) ?? [];
+  const hasLoaderRow = isPending || hasNextPage;
 
   const virtualizer = useVirtualizer({
-    count: items.length,
-    getItemKey: (index) => getItemKey(items[index]!),
+    count: items.length + (hasLoaderRow ? 1 : 0),
+    getItemKey: (index) =>
+      index < items.length ? `item:${getItemKey(items[index]!)}` : 'loader',
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: OVERSCAN,
@@ -74,33 +76,32 @@ export function InfiniteList<TPage, TItem, TPageParam>({
   };
 
   return (
-    <>
-      <div
-        ref={scrollRef}
-        style={{ height: LIST_HEIGHT, overflow: 'auto' }}
-        onScroll={handleScroll}
-      >
-        <div
-          style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
-        >
-          {virtualRows.map((row) => (
-            <div
-              key={row.key}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: row.size,
-                transform: `translateY(${row.start}px)`,
-              }}
-            >
-              {renderItem(items[row.index]!, row.index)}
-            </div>
-          ))}
-        </div>
+    <div
+      ref={scrollRef}
+      style={{ height: LIST_HEIGHT, overflow: 'auto' }}
+      onScroll={handleScroll}
+    >
+      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+        {virtualRows.map((row) => (
+          <div
+            key={row.key}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: row.size,
+              transform: `translateY(${row.start}px)`,
+            }}
+          >
+            {row.index < items.length ? (
+              renderItem(items[row.index]!, row.index)
+            ) : (
+              <LoaderRow loading={isPending || isFetchingNextPage} />
+            )}
+          </div>
+        ))}
       </div>
-      {(isPending || isFetchingNextPage) && <Spin />}
-    </>
+    </div>
   );
 }
