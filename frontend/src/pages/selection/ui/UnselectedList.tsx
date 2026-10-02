@@ -29,9 +29,11 @@ export function UnselectedList() {
         <InfiniteList
           queryKey={itemsQueryKeys.unselected}
           initialPageParam={0}
-          queryFn={({ pageParam, signal }) => getItems(pageParam, signal)}
+          queryFn={({ pageParam, signal }) =>
+            getItems('unselected', pageParam, signal)
+          }
           getNextPageParam={getNextItemsPageParam}
-          getItems={(page) => page.products}
+          getItems={(page) => page.items}
           getItemKey={(item) => item.id}
           renderItem={(item) => (
             <ListRow
@@ -39,12 +41,12 @@ export function UnselectedList() {
                 <Button
                   size="small"
                   icon={<PlusOutlined />}
-                  aria-label={`Добавить ${item.title}`}
+                  aria-label={`Добавить ${item.id}`}
                 />
               }
             >
               <Typography.Text ellipsis style={{ minWidth: 0 }}>
-                {item.title}
+                {item.id}
               </Typography.Text>
             </ListRow>
           )}

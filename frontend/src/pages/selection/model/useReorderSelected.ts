@@ -21,8 +21,8 @@ export function useReorderSelected() {
             data.pages,
             fromIndex,
             toIndex,
-            (page) => page.products,
-            (page, products) => ({ ...page, products }),
+            (page) => page.items,
+            (page, items) => ({ ...page, items }),
           ),
         };
       },

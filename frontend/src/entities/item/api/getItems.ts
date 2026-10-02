@@ -1,13 +1,14 @@
-import type { ItemsPage } from '../model/types';
+import type { Item, ItemsPage } from '../model/types';
 
 const PAGE_SIZE = 20;
 
 export async function getItems(
-  skip: number,
+  selection: 'selected' | 'unselected',
+  offset: number,
   signal: AbortSignal,
 ): Promise<ItemsPage> {
   const response = await fetch(
-    `https://dummyjson.com/products?limit=${PAGE_SIZE}&skip=${skip}&select=title`,
+    `/api/items/${selection}?limit=${PAGE_SIZE}&offset=${offset}`,
     { signal },
   );
 
@@ -15,5 +16,7 @@ export async function getItems(
     throw new Error('Не удалось загрузить данные');
   }
 
-  return response.json();
+  const items: Item[] = await response.json();
+
+  return { items, offset, limit: PAGE_SIZE };
 }

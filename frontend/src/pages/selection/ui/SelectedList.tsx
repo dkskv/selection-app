@@ -37,18 +37,20 @@ export function SelectedList() {
             >(itemsQueryKeys.selected);
 
             const item = data?.pages
-              .flatMap((page) => page.products)
+              .flatMap((page) => page.items)
               .find((item) => item.id === id);
 
-            return <Typography.Text>{item?.title}</Typography.Text>;
+            return <Typography.Text>{item?.id}</Typography.Text>;
           }}
         >
           <InfiniteList
             queryKey={itemsQueryKeys.selected}
             initialPageParam={0}
-            queryFn={({ pageParam, signal }) => getItems(pageParam, signal)}
+            queryFn={({ pageParam, signal }) =>
+              getItems('selected', pageParam, signal)
+            }
             getNextPageParam={getNextItemsPageParam}
-            getItems={(page) => page.products}
+            getItems={(page) => page.items}
             getItemKey={(item) => item.id}
             renderItem={(item, index) => (
               <SortableItem id={item.id} index={index}>
@@ -58,17 +60,17 @@ export function SelectedList() {
                       <Button
                         size="small"
                         icon={<MinusOutlined />}
-                        aria-label={`Удалить ${item.title}`}
+                        aria-label={`Удалить ${item.id}`}
                       />
                     }
                   >
                     <Flex align="center" gap="small" style={{ minWidth: 0 }}>
                       <DragHandle
                         ref={handleRef}
-                        label={`Переместить ${item.title}`}
+                        label={`Переместить ${item.id}`}
                       />
                       <Typography.Text ellipsis style={{ minWidth: 0 }}>
-                        {item.title}
+                        {item.id}
                       </Typography.Text>
                     </Flex>
                   </ListRow>

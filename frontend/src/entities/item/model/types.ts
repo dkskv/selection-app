@@ -1,10 +1,9 @@
 export type Item = {
   id: number;
-  title: string;
 };
 
 export type ItemsPage = {
-  products: Item[];
-  total: number;
-  skip: number;
+  items: Item[];
+  offset: number;
+  limit: number;
 };
