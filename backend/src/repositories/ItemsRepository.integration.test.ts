@@ -149,4 +149,60 @@ describe('Репозитории с SQLite in-memory', () => {
 
     await expect(repository.findUnselected()).resolves.toEqual([{ id: 40 }]);
   });
+
+  describe.each(['findSelected', 'findUnselected'] as const)(
+    'Пагинация %s',
+    (method) => {
+      const order =
+        method === 'findSelected' ? [40, 10, 30, 20] : [10, 20, 30, 40];
+
+      beforeEach(async () => {
+        for (const id of [40, 10, 30, 20]) {
+          await repository.create(id);
+
+          if (method === 'findSelected') {
+            await selection.select(id);
+          }
+        }
+
+        await repository.create(50);
+
+        if (method === 'findUnselected') {
+          await selection.select(50);
+        }
+      });
+
+      it.each([
+        { params: {}, start: 0, end: 4 },
+        { params: { limit: 2 }, start: 0, end: 2 },
+        { params: { offset: 2 }, start: 2, end: 4 },
+        { params: { limit: 2, offset: 1 }, start: 1, end: 3 },
+        { params: { limit: 3, offset: 3 }, start: 3, end: 4 },
+        { params: { limit: 0 }, start: 0, end: 0 },
+        { params: { limit: 2, offset: 4 }, start: 4, end: 4 },
+        { params: { offset: 100 }, start: 4, end: 4 },
+      ])('возвращает страницу для $params', async ({ params, start, end }) => {
+        await expect(repository[method](params)).resolves.toEqual(
+          order.slice(start, end).map((id) => ({ id })),
+        );
+      });
+
+      it.each(['limit', 'offset'] as const)(
+        'отклоняет некорректный %s',
+        async (key) => {
+          for (const value of [
+            -1,
+            1.5,
+            NaN,
+            Infinity,
+            Number.MAX_SAFE_INTEGER + 1,
+          ]) {
+            await expect(repository[method]({ [key]: value })).rejects.toThrow(
+              RangeError,
+            );
+          }
+        },
+      );
+    },
+  );
 });
