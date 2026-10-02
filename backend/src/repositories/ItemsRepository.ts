@@ -1,16 +1,30 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
+export type Item = { id: number };
+
 export class ItemsRepository {
   private readonly insert: StatementSync;
-  private readonly select: StatementSync;
+  private readonly selectSelected: StatementSync;
+  private readonly selectUnselected: StatementSync;
 
   constructor(database: DatabaseSync) {
     this.insert = database.prepare('INSERT INTO items (id) VALUES (?)');
 
-    this.select = database.prepare('SELECT id FROM items ORDER BY id');
+    this.selectSelected = database.prepare(`
+      SELECT items.id FROM items
+      INNER JOIN selection ON selection.item_id = items.id
+      ORDER BY items.id
+    `);
+
+    this.selectUnselected = database.prepare(`
+      SELECT items.id FROM items
+      LEFT JOIN selection ON selection.item_id = items.id
+      WHERE selection.item_id IS NULL
+      ORDER BY items.id
+    `);
   }
 
-  create(id: number): void {
+  async create(id: number): Promise<void> {
     if (!Number.isSafeInteger(id)) {
       throw new TypeError('ID должен быть безопасным целым числом');
     }
@@ -18,7 +32,11 @@ export class ItemsRepository {
     this.insert.run(id);
   }
 
-  findMany(): { id: number }[] {
-    return this.select.all().map((row) => ({ id: Number(row.id) }));
+  async findSelected(): Promise<Item[]> {
+    return this.selectSelected.all().map((row) => ({ id: Number(row.id) }));
+  }
+
+  async findUnselected(): Promise<Item[]> {
+    return this.selectUnselected.all().map((row) => ({ id: Number(row.id) }));
   }
 }
