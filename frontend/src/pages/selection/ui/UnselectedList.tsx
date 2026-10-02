@@ -1,20 +1,16 @@
+import {
+  getItems,
+  getNextItemsPageParam,
+  itemsQueryKeys,
+} from '../../../entities/item';
 import { Button, Card, Flex, Input, Typography } from 'antd';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
-import { InfiniteList } from './InfiniteList';
-import { ListRow } from './ListRow';
+import { InfiniteList } from '../../../shared/ui/infinite-list';
+import { ListRow } from '../../../shared/ui/list-row';
 import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
 
-type ProductsPage = {
-  products: { id: number; title: string }[];
-  total: number;
-  skip: number;
-};
-
-const PAGE_SIZE = 20;
-const PRODUCTS_QUERY_KEY = ['products', 'unselected'] as const;
-
-export function Unselected() {
+export function UnselectedList() {
   return (
     <Card title="Unselected" style={{ flex: 1, minWidth: 0 }}>
       <Flex vertical gap="middle">
@@ -31,25 +27,10 @@ export function Unselected() {
           </Flex>
         </Flex>
         <InfiniteList
-          queryKey={PRODUCTS_QUERY_KEY}
+          queryKey={itemsQueryKeys.unselected}
           initialPageParam={0}
-          queryFn={async ({ pageParam, signal }): Promise<ProductsPage> => {
-            const response = await fetch(
-              `https://dummyjson.com/products?limit=${PAGE_SIZE}&skip=${pageParam}&select=title`,
-              { signal },
-            );
-
-            if (!response.ok) {
-              throw new Error('Не удалось загрузить данные');
-            }
-
-            return response.json();
-          }}
-          getNextPageParam={(lastPage) => {
-            const nextSkip = lastPage.skip + lastPage.products.length;
-
-            return nextSkip < lastPage.total ? nextSkip : undefined;
-          }}
+          queryFn={({ pageParam, signal }) => getItems(pageParam, signal)}
+          getNextPageParam={getNextItemsPageParam}
           getItems={(page) => page.products}
           getItemKey={(item) => item.id}
           renderItem={(item) => (

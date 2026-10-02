@@ -1,0 +1,83 @@
+import {
+  getItems,
+  getNextItemsPageParam,
+  itemsQueryKeys,
+  type ItemsPage,
+} from '../../../entities/item';
+import { Button, Card, Flex, Typography } from 'antd';
+import MinusOutlined from '@ant-design/icons/MinusOutlined';
+import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { InfiniteList } from '../../../shared/ui/infinite-list';
+import { ListRow } from '../../../shared/ui/list-row';
+import { SearchInput } from './SearchInput';
+import controls from './ListControls.module.css';
+import { ListDnd, SortableItem, DragHandle } from '../../../shared/ui/list-dnd';
+import { useReorderSelected } from '../model/useReorderSelected';
+
+export function SelectedList() {
+  const queryClient = useQueryClient();
+
+  const handleMove = useReorderSelected();
+
+  return (
+    <Card title="Selected" style={{ flex: 1, minWidth: 0 }}>
+      <Flex vertical gap="middle">
+        <Flex gap={8} wrap>
+          <div className={controls.half}>
+            <SearchInput />
+          </div>
+        </Flex>
+        <ListDnd
+          onMove={handleMove}
+          // Позициями строк управляет виртуализатор, поэтому отключаем перестановку DOM во время переноса.
+          onDragOver={(event) => event.preventDefault()}
+          renderOverlay={(id) => {
+            const data = queryClient.getQueryData<
+              InfiniteData<ItemsPage, number>
+            >(itemsQueryKeys.selected);
+
+            const item = data?.pages
+              .flatMap((page) => page.products)
+              .find((item) => item.id === id);
+
+            return <Typography.Text>{item?.title}</Typography.Text>;
+          }}
+        >
+          <InfiniteList
+            queryKey={itemsQueryKeys.selected}
+            initialPageParam={0}
+            queryFn={({ pageParam, signal }) => getItems(pageParam, signal)}
+            getNextPageParam={getNextItemsPageParam}
+            getItems={(page) => page.products}
+            getItemKey={(item) => item.id}
+            renderItem={(item, index) => (
+              <SortableItem id={item.id} index={index}>
+                {(handleRef) => (
+                  <ListRow
+                    action={
+                      <Button
+                        size="small"
+                        icon={<MinusOutlined />}
+                        aria-label={`Удалить ${item.title}`}
+                      />
+                    }
+                  >
+                    <Flex align="center" gap="small" style={{ minWidth: 0 }}>
+                      <DragHandle
+                        ref={handleRef}
+                        label={`Переместить ${item.title}`}
+                      />
+                      <Typography.Text ellipsis style={{ minWidth: 0 }}>
+                        {item.title}
+                      </Typography.Text>
+                    </Flex>
+                  </ListRow>
+                )}
+              </SortableItem>
+            )}
+          />
+        </ListDnd>
+      </Flex>
+    </Card>
+  );
+}
