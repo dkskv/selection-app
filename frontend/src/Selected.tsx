@@ -1,6 +1,8 @@
-import { Card, Space, Typography } from 'antd';
+import { Button, Card, Flex, Typography } from 'antd';
+import MinusOutlined from '@ant-design/icons/MinusOutlined';
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { InfiniteList } from './InfiniteList';
+import { ListRow } from './ListRow';
 import { ListDnd, type ListMove } from './dnd/ListDnd';
 import { SortableItem } from './dnd/SortableItem';
 import { DragHandle } from './dnd/DragHandle';
@@ -89,13 +91,25 @@ export function Selected() {
           renderItem={(item, index) => (
             <SortableItem id={item.id} index={index}>
               {(handleRef) => (
-                <Space>
-                  <DragHandle
-                    ref={handleRef}
-                    label={`Переместить ${item.title}`}
-                  />
-                  <Typography.Text ellipsis>{item.title}</Typography.Text>
-                </Space>
+                <ListRow
+                  action={
+                    <Button
+                      size="small"
+                      icon={<MinusOutlined />}
+                      aria-label={`Удалить ${item.title}`}
+                    />
+                  }
+                >
+                  <Flex align="center" gap="small" style={{ minWidth: 0 }}>
+                    <DragHandle
+                      ref={handleRef}
+                      label={`Переместить ${item.title}`}
+                    />
+                    <Typography.Text ellipsis style={{ minWidth: 0 }}>
+                      {item.title}
+                    </Typography.Text>
+                  </Flex>
+                </ListRow>
               )}
             </SortableItem>
           )}

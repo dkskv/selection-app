@@ -1,5 +1,7 @@
 import { Button, Card, Flex, Input, Typography } from 'antd';
+import PlusOutlined from '@ant-design/icons/PlusOutlined';
 import { InfiniteList } from './InfiniteList';
+import { ListRow } from './ListRow';
 
 type ProductsPage = {
   products: { id: number; title: string }[];
@@ -41,7 +43,19 @@ export function Unselected() {
           getItems={(page) => page.products}
           getItemKey={(item) => item.id}
           renderItem={(item) => (
-            <Typography.Text ellipsis>{item.title}</Typography.Text>
+            <ListRow
+              action={
+                <Button
+                  size="small"
+                  icon={<PlusOutlined />}
+                  aria-label={`Добавить ${item.title}`}
+                />
+              }
+            >
+              <Typography.Text ellipsis style={{ minWidth: 0 }}>
+                {item.title}
+              </Typography.Text>
+            </ListRow>
           )}
         />
       </Flex>

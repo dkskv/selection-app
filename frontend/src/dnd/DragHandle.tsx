@@ -1,5 +1,6 @@
 import type { Ref } from 'react';
 import { Button } from 'antd';
+import HolderOutlined from '@ant-design/icons/HolderOutlined';
 
 /** Настройки ручки переноса. */
 type DragHandleProps = {
@@ -16,9 +17,8 @@ export function DragHandle({ ref, label }: DragHandleProps) {
       ref={ref}
       type="text"
       aria-label={label}
-      style={{ cursor: 'grab', touchAction: 'none' }}
-    >
-      ⠿
-    </Button>
+      icon={<HolderOutlined />}
+      style={{ cursor: 'grab', touchAction: 'none', flexShrink: 0 }}
+    />
   );
 }
