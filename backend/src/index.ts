@@ -2,9 +2,18 @@ import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { createDatabase } from './database.js';
 import { ItemsRepository } from './repositories/ItemsRepository.js';
+import { SelectionRepository } from './repositories/SelectionRepository.js';
+import {
+  createItemSchema,
+  itemParamsSchema,
+  paginationSchema,
+  reorderSchema,
+  selectItemSchema,
+} from './schemas.js';
 
 const database = createDatabase();
 const itemsRepository = new ItemsRepository(database);
+const selectionRepository = new SelectionRepository(database);
 
 for (let id = 1; id <= 1000; id++) {
   await itemsRepository.create(id);
@@ -21,6 +30,52 @@ app.use(express.json());
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.get('/api/items/unselected', async (req, res) => {
+  const pagination = paginationSchema.parse(req.query);
+
+  res.json(await itemsRepository.findUnselected(pagination));
+});
+
+app.get('/api/items/selected', async (req, res) => {
+  const pagination = paginationSchema.parse(req.query);
+
+  res.json(await itemsRepository.findSelected(pagination));
+});
+
+app.post('/api/items', async (req, res) => {
+  const { id } = createItemSchema.parse(req.body);
+
+  await itemsRepository.create(id);
+
+  res.status(201).json({ id });
+});
+
+app.post('/api/selection', async (req, res) => {
+  const { itemId } = selectItemSchema.parse(req.body);
+
+  await selectionRepository.select(itemId);
+
+  res.status(204).end();
+});
+
+app.delete('/api/selection/:itemId', async (req, res) => {
+  const { itemId } = itemParamsSchema.parse(req.params);
+
+  await selectionRepository.deselect(itemId);
+
+  res.status(204).end();
+});
+
+app.patch('/api/selection/:itemId', async (req, res) => {
+  const { itemId } = itemParamsSchema.parse(req.params);
+
+  const { afterId } = reorderSchema.parse(req.body);
+
+  await selectionRepository.reorder(itemId, afterId);
+
+  res.status(204).end();
 });
 
 app.use('/api', (_req, res) => {

@@ -62,10 +62,6 @@ export class SelectionRepository {
 
   /** Выбирает элемент, добавляя его в конец. */
   async select(itemId: number): Promise<void> {
-    if (!Number.isSafeInteger(itemId)) {
-      throw new TypeError('ID должен быть безопасным целым числом');
-    }
-
     const last = this.statements.findLast.get();
 
     const position = generateKeyBetween(
@@ -83,16 +79,6 @@ export class SelectionRepository {
 
   /** Перемещает выбранный элемент после afterId; явный null означает начало. */
   async reorder(itemId: number, afterId: number | null): Promise<void> {
-    if (!Number.isSafeInteger(itemId)) {
-      throw new TypeError('itemId должен быть безопасным целым числом');
-    }
-
-    if (afterId !== null && !Number.isSafeInteger(afterId)) {
-      throw new TypeError(
-        'afterId должен быть безопасным целым числом или null',
-      );
-    }
-
     if (itemId === afterId) {
       throw new Error('Нельзя переместить элемент после самого себя');
     }

@@ -123,7 +123,6 @@ describe('SelectionRepository с SQLite in-memory', () => {
         { itemId: 20, afterId: 20 },
         { itemId: 20, afterId: 99 },
         { itemId: 99, afterId: 20 },
-        { itemId: 20, afterId: undefined },
       ])(
         'отклоняет некорректную перестановку $itemId после $afterId',
         async ({ itemId, afterId }) => {

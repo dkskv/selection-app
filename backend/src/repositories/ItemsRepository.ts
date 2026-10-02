@@ -33,10 +33,6 @@ export class ItemsRepository {
 
   /** Создаёт элемент с указанным ID. */
   async create(id: number): Promise<void> {
-    if (!Number.isSafeInteger(id)) {
-      throw new TypeError('ID должен быть безопасным целым числом');
-    }
-
     this.statements.insert.run(id);
   }
 
@@ -44,18 +40,6 @@ export class ItemsRepository {
   async findSelected({ limit, offset = 0 }: PaginationParams = {}): Promise<
     Item[]
   > {
-    if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 0)) {
-      throw new RangeError(
-        'limit должен быть неотрицательным безопасным целым числом',
-      );
-    }
-
-    if (!Number.isSafeInteger(offset) || offset < 0) {
-      throw new RangeError(
-        'offset должен быть неотрицательным безопасным целым числом',
-      );
-    }
-
     return this.statements.findSelected
       .all(limit ?? -1, offset)
       .map((row) => ({ id: Number(row.id) }));
@@ -65,18 +49,6 @@ export class ItemsRepository {
   async findUnselected({ limit, offset = 0 }: PaginationParams = {}): Promise<
     Item[]
   > {
-    if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 0)) {
-      throw new RangeError(
-        'limit должен быть неотрицательным безопасным целым числом',
-      );
-    }
-
-    if (!Number.isSafeInteger(offset) || offset < 0) {
-      throw new RangeError(
-        'offset должен быть неотрицательным безопасным целым числом',
-      );
-    }
-
     return this.statements.findUnselected
       .all(limit ?? -1, offset)
       .map((row) => ({ id: Number(row.id) }));

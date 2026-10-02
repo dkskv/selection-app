@@ -61,15 +61,6 @@ describe('Репозитории с SQLite in-memory', () => {
     await expect(repository.findUnselected()).resolves.toEqual([{ id: 42 }]);
   });
 
-  it.each([null, undefined, NaN, Infinity, 1.5, Number.MAX_SAFE_INTEGER + 1])(
-    'отклоняет некорректный ID %s без автоматической генерации',
-    async (id) => {
-      await expect(repository.create(id as number)).rejects.toThrow(TypeError);
-
-      await expect(repository.findUnselected()).resolves.toEqual([]);
-    },
-  );
-
   it('не переносит данные в новую базу после пересоздания', async () => {
     await repository.create(42);
 
@@ -186,23 +177,6 @@ describe('Репозитории с SQLite in-memory', () => {
           order.slice(start, end).map((id) => ({ id })),
         );
       });
-
-      it.each(['limit', 'offset'] as const)(
-        'отклоняет некорректный %s',
-        async (key) => {
-          for (const value of [
-            -1,
-            1.5,
-            NaN,
-            Infinity,
-            Number.MAX_SAFE_INTEGER + 1,
-          ]) {
-            await expect(repository[method]({ [key]: value })).rejects.toThrow(
-              RangeError,
-            );
-          }
-        },
-      );
     },
   );
 });
