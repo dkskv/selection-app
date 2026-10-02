@@ -7,7 +7,8 @@ export function createDatabase(): DatabaseSync {
     PRAGMA foreign_keys = ON;
     CREATE TABLE items (id INTEGER PRIMARY KEY);
     CREATE TABLE selection (
-      item_id INTEGER PRIMARY KEY REFERENCES items(id)
+      item_id INTEGER PRIMARY KEY REFERENCES items(id),
+      position TEXT NOT NULL
     );
   `);
 

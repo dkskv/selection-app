@@ -127,4 +127,26 @@ describe('Репозитории с SQLite in-memory', () => {
 
     await expect(repository.findUnselected()).resolves.toEqual([]);
   });
+
+  it('возвращает выбранные элементы в порядке позиций с COLLATE BINARY', async () => {
+    for (const id of [10, 20, 30, 40]) {
+      await repository.create(id);
+    }
+
+    await selection.select(10);
+
+    await selection.select(20);
+
+    await selection.select(30);
+
+    await selection.reorder(30, null);
+
+    await expect(repository.findSelected()).resolves.toEqual([
+      { id: 30 },
+      { id: 10 },
+      { id: 20 },
+    ]);
+
+    await expect(repository.findUnselected()).resolves.toEqual([{ id: 40 }]);
+  });
 });
