@@ -2,6 +2,8 @@ import { Button, Card, Flex, Input, Typography } from 'antd';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
 import { InfiniteList } from './InfiniteList';
 import { ListRow } from './ListRow';
+import { SearchInput } from './SearchInput';
+import controls from './ListControls.module.css';
 
 type ProductsPage = {
   products: { id: number; title: string }[];
@@ -16,9 +18,17 @@ export function Unselected() {
   return (
     <Card title="Unselected" style={{ flex: 1, minWidth: 0 }}>
       <Flex vertical gap="middle">
-        <Flex gap="small">
-          <Input aria-label="Название элемента" />
-          <Button>Добавить</Button>
+        <Flex gap={8} wrap>
+          <div className={controls.half}>
+            <SearchInput />
+          </div>
+          <Flex gap={8} className={controls.half}>
+            <Input
+              aria-label="Название элемента"
+              className={controls.addInput}
+            />
+            <Button className={controls.addButton}>Добавить</Button>
+          </Flex>
         </Flex>
         <InfiniteList
           queryKey={PRODUCTS_QUERY_KEY}

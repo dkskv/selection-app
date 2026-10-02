@@ -1,0 +1,14 @@
+.half {
+  flex: 0 1 calc((100% - 8px) / 2);
+  min-width: min(240px, 100%);
+  max-width: 100%;
+}
+
+.addInput {
+  flex: 1;
+  min-width: 0;
+}
+
+.addButton {
+  flex-shrink: 0;
+}
