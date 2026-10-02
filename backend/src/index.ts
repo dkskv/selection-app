@@ -1,5 +1,14 @@
 import express from 'express';
 import { fileURLToPath } from 'node:url';
+import { createDatabase } from './database.js';
+import { ItemsRepository } from './repositories/ItemsRepository.js';
+
+const database = createDatabase();
+const itemsRepository = new ItemsRepository(database);
+
+for (let id = 1; id <= 1000; id++) {
+  await itemsRepository.create(id);
+}
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
