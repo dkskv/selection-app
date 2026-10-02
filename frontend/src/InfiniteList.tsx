@@ -1,19 +1,22 @@
-import { useRef, type UIEvent } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useRef, type Key, type ReactNode, type UIEvent } from 'react';
+import {
+  useInfiniteQuery,
+  type QueryFunction,
+  type QueryKey,
+  type GetNextPageParamFunction,
+} from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Spin, Typography } from 'antd';
+import { Spin } from 'antd';
 
-type ProductsPage = {
-  /** Элементы текущей страницы. */
-  products: { id: number; title: string }[];
-  /** Общее количество элементов в API. */
-  total: number;
-  /** Количество пропущенных элементов перед текущей страницей. */
-  skip: number;
+export type InfiniteListProps<TPage, TItem, TPageParam> = {
+  queryKey: QueryKey;
+  queryFn: QueryFunction<TPage, QueryKey, TPageParam>;
+  initialPageParam: TPageParam;
+  getNextPageParam: GetNextPageParamFunction<TPageParam, TPage>;
+  getItems: (page: TPage) => TItem[];
+  getItemKey: (item: TItem) => Key;
+  renderItem: (item: TItem) => ReactNode;
 };
-
-/** Количество элементов в одной странице API. */
-const PAGE_SIZE = 20;
 
 /** Высота прокручиваемого блока в пикселях. */
 const LIST_HEIGHT = 400;
@@ -27,36 +30,30 @@ const OVERSCAN = 5;
 /** Расстояние до конца блока в пикселях, при котором начинается подгрузка. */
 const LOAD_MORE_THRESHOLD = 200;
 
-export function InfiniteList() {
+export function InfiniteList<TPage, TItem, TPageParam>({
+  queryKey,
+  queryFn,
+  initialPageParam,
+  getNextPageParam,
+  getItems,
+  getItemKey,
+  renderItem,
+}: InfiniteListProps<TPage, TItem, TPageParam>) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { data, isPending, isFetchingNextPage, hasNextPage, fetchNextPage } =
     useInfiniteQuery({
-      queryKey: ['products'],
-      initialPageParam: 0,
-      queryFn: async ({ pageParam, signal }): Promise<ProductsPage> => {
-        const response = await fetch(
-          `https://dummyjson.com/products?limit=${PAGE_SIZE}&skip=${pageParam}&select=title`,
-          { signal },
-        );
-
-        if (!response.ok) {
-          throw new Error('Не удалось загрузить данные');
-        }
-
-        return response.json();
-      },
-      getNextPageParam: (lastPage) => {
-        const nextSkip = lastPage.skip + lastPage.products.length;
-
-        return nextSkip < lastPage.total ? nextSkip : undefined;
-      },
+      queryKey,
+      queryFn,
+      initialPageParam,
+      getNextPageParam,
     });
 
-  const products = data?.pages.flatMap((page) => page.products) ?? [];
+  const items = data?.pages.flatMap(getItems) ?? [];
 
   const virtualizer = useVirtualizer({
-    count: products.length,
+    count: items.length,
+    getItemKey: (index) => getItemKey(items[index]!),
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: OVERSCAN,
@@ -88,7 +85,7 @@ export function InfiniteList() {
         >
           {virtualRows.map((row) => (
             <div
-              key={products[row.index]!.id}
+              key={row.key}
               style={{
                 position: 'absolute',
                 top: 0,
@@ -98,9 +95,7 @@ export function InfiniteList() {
                 transform: `translateY(${row.start}px)`,
               }}
             >
-              <Typography.Text ellipsis>
-                {products[row.index]!.title}
-              </Typography.Text>
+              {renderItem(items[row.index]!)}
             </div>
           ))}
         </div>
