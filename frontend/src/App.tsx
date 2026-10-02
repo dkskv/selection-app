@@ -1,5 +1,5 @@
-function App() {
-  return 'Hello, world!';
-}
+import { InfiniteList } from './InfiniteList';
 
-export default App;
+export function App() {
+  return <InfiniteList />;
+}
