@@ -15,7 +15,7 @@ export type InfiniteListProps<TPage, TItem, TPageParam> = {
   getNextPageParam: GetNextPageParamFunction<TPageParam, TPage>;
   getItems: (page: TPage) => TItem[];
   getItemKey: (item: TItem) => Key;
-  renderItem: (item: TItem) => ReactNode;
+  renderItem: (item: TItem, index: number) => ReactNode;
 };
 
 /** Высота прокручиваемого блока в пикселях. */
@@ -95,7 +95,7 @@ export function InfiniteList<TPage, TItem, TPageParam>({
                 transform: `translateY(${row.start}px)`,
               }}
             >
-              {renderItem(items[row.index]!)}
+              {renderItem(items[row.index]!, row.index)}
             </div>
           ))}
         </div>
