@@ -3,11 +3,16 @@ import {
   getNextItemsPageParam,
   getPreviousItemsPageParam,
   itemsQueryKeys,
+  deselectItem,
   type ItemsPage,
 } from '../../../entities/item';
 import { Button, Card, Flex, Typography } from 'antd';
 import MinusOutlined from '@ant-design/icons/MinusOutlined';
-import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueryClient,
+  type InfiniteData,
+} from '@tanstack/react-query';
 import { InfiniteList } from '../../../shared/ui/infinite-list';
 import { ListRow } from '../../../shared/ui/list-row';
 import { SearchInput } from './SearchInput';
@@ -17,6 +22,16 @@ import { useReorderSelected } from '../model/useReorderSelected';
 
 export function SelectedList() {
   const queryClient = useQueryClient();
+
+  const deselectMutation = useMutation({
+    mutationFn: deselectItem,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: itemsQueryKeys.selected }),
+        queryClient.invalidateQueries({ queryKey: itemsQueryKeys.unselected }),
+      ]);
+    },
+  });
 
   const handleMove = useReorderSelected();
 
@@ -28,6 +43,11 @@ export function SelectedList() {
             <SearchInput />
           </div>
         </Flex>
+        {deselectMutation.isError && (
+          <Typography.Text type="danger">
+            {deselectMutation.error.message}
+          </Typography.Text>
+        )}
         <ListDnd
           onMove={handleMove}
           // Позициями строк управляет виртуализатор, поэтому отключаем перестановку DOM во время переноса.
@@ -63,6 +83,12 @@ export function SelectedList() {
                         size="small"
                         icon={<MinusOutlined />}
                         aria-label={`Удалить ${item.id}`}
+                        loading={
+                          deselectMutation.isPending &&
+                          deselectMutation.variables === item.id
+                        }
+                        disabled={deselectMutation.isPending}
+                        onClick={() => deselectMutation.mutate(item.id)}
                       />
                     }
                   >
