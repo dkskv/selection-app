@@ -4,7 +4,7 @@ import { UnselectedList } from './UnselectedList';
 
 export function SelectionPage() {
   return (
-    <Flex gap="middle" align="flex-start">
+    <Flex gap="middle" align="stretch">
       <UnselectedList />
       <SelectedList />
     </Flex>
