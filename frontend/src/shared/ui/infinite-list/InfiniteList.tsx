@@ -8,6 +8,8 @@ import {
 } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteListScroll } from './useInfiniteListScroll';
+import styles from './InfiniteList.module.css';
+import { ProgressLoader } from '../progress-loader';
 
 export type InfiniteListProps<TPage, TItem, TPageParam> = {
   queryKey: QueryKey;
@@ -19,9 +21,6 @@ export type InfiniteListProps<TPage, TItem, TPageParam> = {
   getItemKey: (item: TItem) => Key;
   renderItem: (item: TItem, index: number) => ReactNode;
 };
-
-/** Высота прокручиваемого блока в пикселях. */
-const LIST_HEIGHT = 400;
 
 /** Фиксированная высота строки в пикселях для расчёта виртуализации. */
 const ROW_HEIGHT = 40;
@@ -85,30 +84,42 @@ export function InfiniteList<TPage, TItem, TPageParam>({
   });
 
   return (
-    <div
-      ref={scrollRef}
-      style={{ height: LIST_HEIGHT, overflow: 'auto' }}
-      onScroll={handleScroll}
-    >
-      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-        {virtualRows.map((row) => {
-          return (
-            <div
-              key={row.key}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: row.size,
-                transform: `translateY(${row.start}px)`,
-              }}
-            >
-              {renderItem(items[row.index]!, row.index)}
-            </div>
-          );
-        })}
+    <div className={styles.container}>
+      <div
+        ref={scrollRef}
+        className={styles.scrollArea}
+        onScroll={handleScroll}
+      >
+        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+          {virtualRows.map((row) => {
+            return (
+              <div
+                key={row.key}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: row.size,
+                  transform: `translateY(${row.start}px)`,
+                }}
+              >
+                {renderItem(items[row.index]!, row.index)}
+              </div>
+            );
+          })}
+        </div>
       </div>
+      {isFetchingPreviousPage && (
+        <div className={styles.loaderTop}>
+          <ProgressLoader />
+        </div>
+      )}
+      {isFetchingNextPage && (
+        <div className={styles.loaderBottom}>
+          <ProgressLoader />
+        </div>
+      )}
     </div>
   );
 }

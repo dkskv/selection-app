@@ -1,0 +1,29 @@
+.loader {
+  width: 100%;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.indicator {
+  width: 35%;
+  height: 100%;
+  background: var(--ant-color-primary, #1677ff);
+  animation: progress 1.2s ease-in-out infinite;
+}
+
+@keyframes progress {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .indicator {
+    animation-duration: 2.4s;
+  }
+}

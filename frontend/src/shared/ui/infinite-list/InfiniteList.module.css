@@ -1,0 +1,25 @@
+.container {
+  position: relative;
+  height: 400px;
+}
+
+.scrollArea {
+  height: 100%;
+  overflow: auto;
+}
+
+.loaderTop,
+.loaderBottom {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  left: 0;
+}
+
+.loaderTop {
+  top: 0;
+}
+
+.loaderBottom {
+  bottom: 0;
+}
