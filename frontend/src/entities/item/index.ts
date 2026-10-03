@@ -2,4 +2,8 @@ export type { Item, ItemsPage } from './model/types';
 
 export { getItems } from './api/getItems';
 
-export { itemsQueryKeys, getNextItemsPageParam } from './api/queries';
+export {
+  itemsQueryKeys,
+  getNextItemsPageParam,
+  getPreviousItemsPageParam,
+} from './api/queries';

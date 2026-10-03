@@ -1,6 +1,7 @@
 import {
   getItems,
   getNextItemsPageParam,
+  getPreviousItemsPageParam,
   itemsQueryKeys,
   type ItemsPage,
 } from '../../../entities/item';
@@ -50,6 +51,7 @@ export function SelectedList() {
               getItems('selected', pageParam, signal)
             }
             getNextPageParam={getNextItemsPageParam}
+            getPreviousPageParam={getPreviousItemsPageParam}
             getItems={(page) => page.items}
             getItemKey={(item) => item.id}
             renderItem={(item, index) => (

@@ -1,6 +1,7 @@
 import {
   getItems,
   getNextItemsPageParam,
+  getPreviousItemsPageParam,
   itemsQueryKeys,
 } from '../../../entities/item';
 import { Button, Card, Flex, Input, Typography } from 'antd';
@@ -33,6 +34,7 @@ export function UnselectedList() {
             getItems('unselected', pageParam, signal)
           }
           getNextPageParam={getNextItemsPageParam}
+          getPreviousPageParam={getPreviousItemsPageParam}
           getItems={(page) => page.items}
           getItemKey={(item) => item.id}
           renderItem={(item) => (

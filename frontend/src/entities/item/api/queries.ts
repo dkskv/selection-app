@@ -10,3 +10,9 @@ export function getNextItemsPageParam(lastPage: ItemsPage) {
     ? lastPage.offset + lastPage.items.length
     : undefined;
 }
+
+export function getPreviousItemsPageParam(firstPage: ItemsPage) {
+  return firstPage.offset > 0
+    ? Math.max(0, firstPage.offset - firstPage.limit)
+    : undefined;
+}
