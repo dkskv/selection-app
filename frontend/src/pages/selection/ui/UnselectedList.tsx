@@ -10,16 +10,20 @@ import { InfiniteList } from '../../../shared/ui/infinite-list';
 import { ListRow } from '../../../shared/ui/list-row';
 import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { selectItem } from '../../../entities/item';
-import { refreshSelectionLists } from '../model/refreshSelectionLists';
 
-export function UnselectedList() {
-  const queryClient = useQueryClient();
-
+export function UnselectedList({
+  cancelRefresh,
+  scheduleRefresh,
+}: {
+  cancelRefresh: () => Promise<void>;
+  scheduleRefresh: () => void;
+}) {
   const selectMutation = useMutation({
     mutationFn: selectItem,
-    onSuccess: () => refreshSelectionLists(queryClient),
+    onMutate: cancelRefresh,
+    onSettled: scheduleRefresh,
   });
 
   return (
@@ -63,7 +67,10 @@ export function UnselectedList() {
                     selectMutation.isPending &&
                     selectMutation.variables === item.id
                   }
-                  disabled={selectMutation.isPending}
+                  disabled={
+                    selectMutation.isPending &&
+                    selectMutation.variables === item.id
+                  }
                   onClick={() => selectMutation.mutate(item.id)}
                 />
               }

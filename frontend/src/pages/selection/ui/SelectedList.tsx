@@ -19,14 +19,20 @@ import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
 import { ListDnd, SortableItem, DragHandle } from '../../../shared/ui/list-dnd';
 import { useReorderSelected } from '../model/useReorderSelected';
-import { refreshSelectionLists } from '../model/refreshSelectionLists';
 
-export function SelectedList() {
+export function SelectedList({
+  cancelRefresh,
+  scheduleRefresh,
+}: {
+  cancelRefresh: () => Promise<void>;
+  scheduleRefresh: () => void;
+}) {
   const queryClient = useQueryClient();
 
   const deselectMutation = useMutation({
     mutationFn: deselectItem,
-    onSuccess: () => refreshSelectionLists(queryClient),
+    onMutate: cancelRefresh,
+    onSettled: scheduleRefresh,
   });
 
   const handleMove = useReorderSelected();
@@ -83,7 +89,10 @@ export function SelectedList() {
                           deselectMutation.isPending &&
                           deselectMutation.variables === item.id
                         }
-                        disabled={deselectMutation.isPending}
+                        disabled={
+                          deselectMutation.isPending &&
+                          deselectMutation.variables === item.id
+                        }
                         onClick={() => deselectMutation.mutate(item.id)}
                       />
                     }

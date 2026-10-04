@@ -16,10 +16,12 @@
     "@tanstack/react-query": "^5.104.1",
     "@tanstack/react-virtual": "^3.14.13",
     "antd": "^6.6.5",
+    "lodash.debounce": "^4.0.8",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@types/lodash.debounce": "^4.0.9",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

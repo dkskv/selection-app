@@ -15,12 +15,21 @@ const selectionQueries = [
 /** Параллельно загружает все закешированные страницы и применяет их только при полном успехе. */
 export async function refreshSelectionLists(
   queryClient: QueryClient,
+  signal: AbortSignal,
 ): Promise<void> {
+  if (signal.aborted) {
+    throw new DOMException('Обновление отменено', 'AbortError');
+  }
+
   await Promise.all(
     selectionQueries.map(([, queryKey]) =>
       queryClient.cancelQueries({ queryKey }),
     ),
   );
+
+  if (signal.aborted) {
+    throw new DOMException('Обновление отменено', 'AbortError');
+  }
 
   const refreshedLists = await Promise.all(
     selectionQueries.map(async ([selection, queryKey]) => {
@@ -30,9 +39,7 @@ export async function refreshSelectionLists(
       const pageParams = data?.pageParams.length ? data.pageParams : [0];
 
       const pages = await Promise.all(
-        pageParams.map((offset) =>
-          getItems(selection, offset, new AbortController().signal),
-        ),
+        pageParams.map((offset) => getItems(selection, offset, signal)),
       );
 
       return {
@@ -41,6 +48,10 @@ export async function refreshSelectionLists(
       };
     }),
   );
+
+  if (signal.aborted) {
+    throw new DOMException('Обновление отменено', 'AbortError');
+  }
 
   refreshedLists.forEach(({ queryKey, data }) => {
     queryClient.setQueryData(queryKey, data);
