@@ -1,0 +1,17 @@
+.card {
+  flex: 1;
+  min-width: 0;
+}
+
+.card :global(.ant-card-body) {
+  position: relative;
+}
+
+.progress {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  left: 0;
+  transform: translateY(-50%);
+}

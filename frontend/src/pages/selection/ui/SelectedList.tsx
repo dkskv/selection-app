@@ -19,26 +19,46 @@ import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
 import { ListDnd, SortableItem, DragHandle } from '../../../shared/ui/list-dnd';
 import { useReorderSelected } from '../model/useReorderSelected';
+import { ProgressLoader } from '../../../shared/ui/progress-loader';
+import listStyles from './SelectionList.module.css';
 
 export function SelectedList({
-  cancelRefresh,
-  scheduleRefresh,
+  cancelUnselectedRefresh,
+  scheduleUnselectedRefresh,
+  cancelSelectedRefresh,
+  scheduleSelectedRefresh,
+  isRefreshing,
+  refreshError,
 }: {
-  cancelRefresh: () => Promise<void>;
-  scheduleRefresh: () => void;
+  cancelUnselectedRefresh: () => void;
+  scheduleUnselectedRefresh: () => void;
+  cancelSelectedRefresh: () => void;
+  scheduleSelectedRefresh: () => void;
+  isRefreshing: boolean;
+  refreshError: string | null;
 }) {
   const queryClient = useQueryClient();
 
   const deselectMutation = useMutation({
     mutationFn: deselectItem,
-    onMutate: cancelRefresh,
-    onSettled: scheduleRefresh,
+    onMutate: () =>
+      Promise.all([cancelUnselectedRefresh(), cancelSelectedRefresh()]),
+    onSettled: () => {
+      scheduleUnselectedRefresh();
+
+      scheduleSelectedRefresh();
+    },
   });
 
   const handleMove = useReorderSelected();
 
   return (
-    <Card title="Selected" style={{ flex: 1, minWidth: 0 }}>
+    <Card title="Selected" className={listStyles.card}>
+      {isRefreshing && (
+        <div className={listStyles.progress}>
+          <ProgressLoader />
+        </div>
+      )}
       <Flex vertical gap="middle">
         <Flex gap={8} wrap>
           <div className={controls.half}>
@@ -49,6 +69,9 @@ export function SelectedList({
           <Typography.Text type="danger">
             {deselectMutation.error.message}
           </Typography.Text>
+        )}
+        {refreshError && (
+          <Typography.Text type="danger">{refreshError}</Typography.Text>
         )}
         <ListDnd
           onMove={handleMove}

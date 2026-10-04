@@ -12,22 +12,42 @@ import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
 import { useMutation } from '@tanstack/react-query';
 import { selectItem } from '../../../entities/item';
+import { ProgressLoader } from '../../../shared/ui/progress-loader';
+import listStyles from './SelectionList.module.css';
 
 export function UnselectedList({
-  cancelRefresh,
-  scheduleRefresh,
+  cancelUnselectedRefresh,
+  scheduleUnselectedRefresh,
+  cancelSelectedRefresh,
+  scheduleSelectedRefresh,
+  isRefreshing,
+  refreshError,
 }: {
-  cancelRefresh: () => Promise<void>;
-  scheduleRefresh: () => void;
+  cancelUnselectedRefresh: () => void;
+  scheduleUnselectedRefresh: () => void;
+  cancelSelectedRefresh: () => void;
+  scheduleSelectedRefresh: () => void;
+  isRefreshing: boolean;
+  refreshError: string | null;
 }) {
   const selectMutation = useMutation({
     mutationFn: selectItem,
-    onMutate: cancelRefresh,
-    onSettled: scheduleRefresh,
+    onMutate: () =>
+      Promise.all([cancelUnselectedRefresh(), cancelSelectedRefresh()]),
+    onSettled: () => {
+      scheduleUnselectedRefresh();
+
+      scheduleSelectedRefresh();
+    },
   });
 
   return (
-    <Card title="Unselected" style={{ flex: 1, minWidth: 0 }}>
+    <Card title="Unselected" className={listStyles.card}>
+      {isRefreshing && (
+        <div className={listStyles.progress}>
+          <ProgressLoader />
+        </div>
+      )}
       <Flex vertical gap="middle">
         <Flex gap={8} wrap>
           <div className={controls.half}>
@@ -45,6 +65,9 @@ export function UnselectedList({
           <Typography.Text type="danger">
             {selectMutation.error.message}
           </Typography.Text>
+        )}
+        {refreshError && (
+          <Typography.Text type="danger">{refreshError}</Typography.Text>
         )}
         <InfiniteList
           queryKey={itemsQueryKeys.unselected}
