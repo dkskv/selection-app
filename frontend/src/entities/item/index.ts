@@ -8,6 +8,8 @@ export { selectItem } from './api/selectItem';
 
 export { deselectItem } from './api/deselectItem';
 
+export { reorderSelectedItem } from './api/reorderSelectedItem';
+
 export {
   itemsQueryKeys,
   getNextItemsPageParam,

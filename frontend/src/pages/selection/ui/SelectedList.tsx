@@ -4,6 +4,7 @@ import {
   getPreviousItemsPageParam,
   itemsQueryKeys,
   deselectItem,
+  reorderSelectedItem,
   type ItemsPage,
 } from '../../../entities/item';
 import { Button, Card, Flex, message, Typography } from 'antd';
@@ -52,6 +53,31 @@ export function SelectedList({
 
   const handleMove = useReorderSelected();
 
+  const reorderMutation = useMutation({
+    mutationFn: ({ itemId, afterId }: {
+      itemId: number;
+      afterId: number | null;
+      move: Parameters<typeof handleMove>[0];
+    }) => reorderSelectedItem(itemId, afterId),
+    onMutate: ({ move }) => handleMove(move),
+    onError: (error) => messageApi.error(error.message),
+  });
+
+  const moveSelectedItem = (move: Parameters<typeof handleMove>[0]) => {
+    const data = queryClient.getQueryData<InfiniteData<ItemsPage, number>>(
+      itemsQueryKeys.selected,
+    );
+
+    const items = data?.pages.flatMap((page) => page.items) ?? [];
+    const afterId = move.toIndex === 0 ? null : items[move.toIndex - 1]?.id ?? null;
+
+    reorderMutation.mutate({
+      itemId: Number(move.id),
+      afterId,
+      move,
+    });
+  };
+
   return (
     <Card title="Selected" className={listStyles.card}>
       {contextHolder}
@@ -67,7 +93,7 @@ export function SelectedList({
           </div>
         </Flex>
         <ListDnd
-          onMove={handleMove}
+          onMove={moveSelectedItem}
           // Позициями строк управляет виртуализатор, поэтому отключаем перестановку DOM во время переноса.
           onDragOver={(event) => event.preventDefault()}
           renderOverlay={(id) => {
@@ -117,6 +143,10 @@ export function SelectedList({
                       <DragHandle
                         ref={handleRef}
                         label={`Переместить ${item.id}`}
+                        loading={
+                          reorderMutation.isPending &&
+                          reorderMutation.variables.itemId === item.id
+                        }
                       />
                       <Typography.Text ellipsis style={{ minWidth: 0 }}>
                         {item.id}
