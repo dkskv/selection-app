@@ -5,7 +5,7 @@ import {
   itemsQueryKeys,
 } from '../../../entities/item';
 import { useState } from 'react';
-import { Button, Card, Flex, InputNumber, Typography } from 'antd';
+import { Button, Card, Flex, InputNumber, message, Typography } from 'antd';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
 import { InfiniteList } from '../../../shared/ui/infinite-list';
 import { ListRow } from '../../../shared/ui/list-row';
@@ -22,22 +22,22 @@ export function UnselectedList({
   cancelSelectedRefresh,
   scheduleSelectedRefresh,
   isRefreshing,
-  refreshError,
 }: {
   cancelUnselectedRefresh: () => void;
   scheduleUnselectedRefresh: () => void;
   cancelSelectedRefresh: () => void;
   scheduleSelectedRefresh: () => void;
   isRefreshing: boolean;
-  refreshError: string | null;
 }) {
   const [newItemId, setNewItemId] = useState<number | null>(null);
+  const [messageApi, contextHolder] = message.useMessage();
 
   const selectMutation = useMutation({
     mutationFn: selectItem,
+    onError: (error) => messageApi.error(error.message),
     onMutate: () =>
       Promise.all([cancelUnselectedRefresh(), cancelSelectedRefresh()]),
-    onSettled: () => {
+    onSuccess: () => {
       scheduleUnselectedRefresh();
 
       scheduleSelectedRefresh();
@@ -46,8 +46,9 @@ export function UnselectedList({
 
   const createMutation = useMutation({
     mutationFn: createItem,
+    onError: (error) => messageApi.error(error.message),
     onMutate: cancelUnselectedRefresh,
-    onSettled: scheduleUnselectedRefresh,
+    onSuccess: scheduleUnselectedRefresh,
   });
 
   const addItem = () => {
@@ -60,6 +61,7 @@ export function UnselectedList({
 
   return (
     <Card title="Unselected" className={listStyles.card}>
+      {contextHolder}
       {isRefreshing && (
         <div className={listStyles.progress}>
           <ProgressLoader />
@@ -89,19 +91,6 @@ export function UnselectedList({
             </Button>
           </Flex>
         </Flex>
-        {selectMutation.isError && (
-          <Typography.Text type="danger">
-            {selectMutation.error.message}
-          </Typography.Text>
-        )}
-        {createMutation.isError && (
-          <Typography.Text type="danger">
-            {createMutation.error.message}
-          </Typography.Text>
-        )}
-        {refreshError && (
-          <Typography.Text type="danger">{refreshError}</Typography.Text>
-        )}
         <InfiniteList
           queryKey={itemsQueryKeys.unselected}
           initialPageParam={0}

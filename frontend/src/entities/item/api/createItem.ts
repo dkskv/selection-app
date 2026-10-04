@@ -6,6 +6,6 @@ export async function createItem(id: number): Promise<void> {
   });
 
   if (!response.ok) {
-    throw new Error('Не удалось добавить элемент');
+    throw new Error('Failed to add item.');
   }
 }

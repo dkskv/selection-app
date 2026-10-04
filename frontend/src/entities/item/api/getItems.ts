@@ -13,7 +13,7 @@ export async function getItems(
   );
 
   if (!response.ok) {
-    throw new Error('Не удалось загрузить данные');
+    throw new Error('Failed to load items.');
   }
 
   const items: Item[] = await response.json();

@@ -6,7 +6,7 @@ import {
   deselectItem,
   type ItemsPage,
 } from '../../../entities/item';
-import { Button, Card, Flex, Typography } from 'antd';
+import { Button, Card, Flex, message, Typography } from 'antd';
 import MinusOutlined from '@ant-design/icons/MinusOutlined';
 import {
   useMutation,
@@ -28,22 +28,22 @@ export function SelectedList({
   cancelSelectedRefresh,
   scheduleSelectedRefresh,
   isRefreshing,
-  refreshError,
 }: {
   cancelUnselectedRefresh: () => void;
   scheduleUnselectedRefresh: () => void;
   cancelSelectedRefresh: () => void;
   scheduleSelectedRefresh: () => void;
   isRefreshing: boolean;
-  refreshError: string | null;
 }) {
   const queryClient = useQueryClient();
+  const [messageApi, contextHolder] = message.useMessage();
 
   const deselectMutation = useMutation({
     mutationFn: deselectItem,
+    onError: (error) => messageApi.error(error.message),
     onMutate: () =>
       Promise.all([cancelUnselectedRefresh(), cancelSelectedRefresh()]),
-    onSettled: () => {
+    onSuccess: () => {
       scheduleUnselectedRefresh();
 
       scheduleSelectedRefresh();
@@ -54,6 +54,7 @@ export function SelectedList({
 
   return (
     <Card title="Selected" className={listStyles.card}>
+      {contextHolder}
       {isRefreshing && (
         <div className={listStyles.progress}>
           <ProgressLoader />
@@ -65,14 +66,6 @@ export function SelectedList({
             <SearchInput />
           </div>
         </Flex>
-        {deselectMutation.isError && (
-          <Typography.Text type="danger">
-            {deselectMutation.error.message}
-          </Typography.Text>
-        )}
-        {refreshError && (
-          <Typography.Text type="danger">{refreshError}</Typography.Text>
-        )}
         <ListDnd
           onMove={handleMove}
           // Позициями строк управляет виртуализатор, поэтому отключаем перестановку DOM во время переноса.

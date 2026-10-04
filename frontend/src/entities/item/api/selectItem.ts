@@ -6,6 +6,6 @@ export async function selectItem(itemId: number): Promise<void> {
   });
 
   if (!response.ok) {
-    throw new Error('Не удалось выбрать элемент');
+    throw new Error('Failed to select item.');
   }
 }

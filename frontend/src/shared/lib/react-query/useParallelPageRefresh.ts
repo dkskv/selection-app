@@ -10,6 +10,7 @@ type UseParallelPageRefreshOptions<TPage, TPageParam> = {
   queryKey: QueryKey;
   initialPageParam: TPageParam;
   fetchPage: (pageParam: TPageParam, signal: AbortSignal) => Promise<TPage>;
+  onError: (error: Error) => void;
 };
 
 /** Обновляет страницы параллельно, обходя последовательное поведение refetchInfiniteQuery в TanStack Query. */
@@ -17,12 +18,12 @@ export function useParallelPageRefresh<TPage, TPageParam>({
   queryKey,
   initialPageParam,
   fetchPage,
+  onError,
 }: UseParallelPageRefreshOptions<TPage, TPageParam>) {
   const isMounted = useMounted();
   const queryClient = useQueryClient();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
@@ -35,8 +36,6 @@ export function useParallelPageRefresh<TPage, TPageParam>({
 
     setIsRefreshing(true);
 
-    setError(null);
-
     try {
       const data =
         queryClient.getQueryData<InfiniteData<TPage, TPageParam>>(queryKey);
@@ -48,7 +47,7 @@ export function useParallelPageRefresh<TPage, TPageParam>({
       await queryClient.cancelQueries({ queryKey, exact: true });
 
       if (signal.aborted) {
-        throw new DOMException('Обновление отменено', 'AbortError');
+        throw new DOMException('Refresh cancelled.', 'AbortError');
       }
 
       const pages = await Promise.all(
@@ -56,7 +55,7 @@ export function useParallelPageRefresh<TPage, TPageParam>({
       );
 
       if (signal.aborted) {
-        throw new DOMException('Обновление отменено', 'AbortError');
+        throw new DOMException('Refresh cancelled.', 'AbortError');
       }
 
       queryClient.setQueryData(queryKey, { pages, pageParams });
@@ -69,10 +68,10 @@ export function useParallelPageRefresh<TPage, TPageParam>({
         controllerRef.current === controller &&
         isMounted()
       ) {
-        setError(
+        onError(
           caughtError instanceof Error
-            ? caughtError.message
-            : 'Не удалось обновить список',
+            ? caughtError
+            : new Error('Failed to refresh items.'),
         );
       }
     } finally {
@@ -84,7 +83,7 @@ export function useParallelPageRefresh<TPage, TPageParam>({
         }
       }
     }
-  }, [fetchPage, initialPageParam, isMounted, queryClient, queryKey]);
+  }, [fetchPage, initialPageParam, isMounted, onError, queryClient, queryKey]);
 
   const cancel = useCallback(() => {
     controllerRef.current?.abort();
@@ -94,11 +93,10 @@ export function useParallelPageRefresh<TPage, TPageParam>({
     if (isMounted()) {
       setIsRefreshing(false);
 
-      setError(null);
     }
   }, [isMounted]);
 
   useEffect(() => cancel, [cancel]);
 
-  return { refresh, cancel, error, isRefreshing };
+  return { refresh, cancel, isRefreshing };
 }
