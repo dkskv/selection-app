@@ -4,14 +4,15 @@ import {
   getPreviousItemsPageParam,
   itemsQueryKeys,
 } from '../../../entities/item';
-import { Button, Card, Flex, Input, Typography } from 'antd';
+import { useState } from 'react';
+import { Button, Card, Flex, InputNumber, Typography } from 'antd';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
 import { InfiniteList } from '../../../shared/ui/infinite-list';
 import { ListRow } from '../../../shared/ui/list-row';
 import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
 import { useMutation } from '@tanstack/react-query';
-import { selectItem } from '../../../entities/item';
+import { createItem, selectItem } from '../../../entities/item';
 import { ProgressLoader } from '../../../shared/ui/progress-loader';
 import listStyles from './SelectionList.module.css';
 
@@ -30,6 +31,8 @@ export function UnselectedList({
   isRefreshing: boolean;
   refreshError: string | null;
 }) {
+  const [newItemId, setNewItemId] = useState<number | null>(null);
+
   const selectMutation = useMutation({
     mutationFn: selectItem,
     onMutate: () =>
@@ -40,6 +43,20 @@ export function UnselectedList({
       scheduleSelectedRefresh();
     },
   });
+
+  const createMutation = useMutation({
+    mutationFn: createItem,
+    onMutate: cancelUnselectedRefresh,
+    onSettled: scheduleUnselectedRefresh,
+  });
+
+  const addItem = () => {
+    if (newItemId === null) return;
+
+    createMutation.mutate(newItemId, {
+      onSuccess: () => setNewItemId(null),
+    });
+  };
 
   return (
     <Card title="Unselected" className={listStyles.card}>
@@ -54,16 +71,32 @@ export function UnselectedList({
             <SearchInput />
           </div>
           <Flex gap={8} className={controls.half}>
-            <Input
+            <InputNumber
               aria-label="Название элемента"
               className={controls.addInput}
+              placeholder="Enter ID"
+              value={newItemId}
+              onChange={setNewItemId}
+              onPressEnter={addItem}
             />
-            <Button className={controls.addButton}>Добавить</Button>
+            <Button
+              className={controls.addButton}
+              loading={createMutation.isPending}
+              disabled={newItemId === null || createMutation.isPending}
+              onClick={addItem}
+            >
+              Add
+            </Button>
           </Flex>
         </Flex>
         {selectMutation.isError && (
           <Typography.Text type="danger">
             {selectMutation.error.message}
+          </Typography.Text>
+        )}
+        {createMutation.isError && (
+          <Typography.Text type="danger">
+            {createMutation.error.message}
           </Typography.Text>
         )}
         {refreshError && (
