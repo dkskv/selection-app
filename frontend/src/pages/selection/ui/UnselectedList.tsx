@@ -12,18 +12,14 @@ import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { selectItem } from '../../../entities/item';
+import { refreshSelectionLists } from '../model/refreshSelectionLists';
 
 export function UnselectedList() {
   const queryClient = useQueryClient();
 
   const selectMutation = useMutation({
     mutationFn: selectItem,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: itemsQueryKeys.unselected }),
-        queryClient.invalidateQueries({ queryKey: itemsQueryKeys.selected }),
-      ]);
-    },
+    onSuccess: () => refreshSelectionLists(queryClient),
   });
 
   return (

@@ -19,18 +19,14 @@ import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
 import { ListDnd, SortableItem, DragHandle } from '../../../shared/ui/list-dnd';
 import { useReorderSelected } from '../model/useReorderSelected';
+import { refreshSelectionLists } from '../model/refreshSelectionLists';
 
 export function SelectedList() {
   const queryClient = useQueryClient();
 
   const deselectMutation = useMutation({
     mutationFn: deselectItem,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: itemsQueryKeys.selected }),
-        queryClient.invalidateQueries({ queryKey: itemsQueryKeys.unselected }),
-      ]);
-    },
+    onSuccess: () => refreshSelectionLists(queryClient),
   });
 
   const handleMove = useReorderSelected();
