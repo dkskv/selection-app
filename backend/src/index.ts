@@ -15,15 +15,26 @@ import {
   selectItemSchema,
 } from './schemas.js';
 
-const database = createDatabase();
-const itemsRepository = new ItemsRepository(database);
-const selectionRepository = new SelectionRepository(database);
-const requestBatcher = createRequestBatcher(1000);
-const createItemBatcher = createRequestBatcher(10_000);
+/** Инициализирует хранилище и зависимости REST-эндпоинтов. */
+const { itemsRepository, selectionRepository, requestBatcher, createItemBatcher } =
+  await (async function init() {
+    const database = createDatabase();
+    const itemsRepository = new ItemsRepository(database);
+    const selectionRepository = new SelectionRepository(database);
+    const requestBatcher = createRequestBatcher(1000);
+    const createItemBatcher = createRequestBatcher(10_000);
 
-for (let id = 1; id <= 1000; id++) {
-  await itemsRepository.create(id);
-}
+    for (let id = 1; id <= 1000; id++) {
+      await itemsRepository.create(id);
+    }
+
+    return {
+      itemsRepository,
+      selectionRepository,
+      requestBatcher,
+      createItemBatcher,
+    };
+  })();
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
