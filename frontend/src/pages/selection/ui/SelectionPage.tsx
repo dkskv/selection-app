@@ -1,12 +1,14 @@
 import { useCallback } from 'react';
 import { Flex, message } from 'antd';
+import { useDebouncedRequest } from '../../../shared/lib/react/useDebouncedRequest';
 import {
   getItems,
+  getNextItemsPageParam,
+  getPreviousItemsPageParam,
   itemsQueryKeys,
   type ItemsPage,
 } from '../../../entities/item';
-import { useDebouncedRequest } from '../../../shared/lib/react/useDebouncedRequest';
-import { useParallelPageRefresh } from '../../../shared/lib/react-query/useParallelPageRefresh';
+import { useSlidingWindowQuery } from '../../../shared/lib/react-query/useSlidingWindowQuery';
 import { SelectedList } from './SelectedList';
 import { UnselectedList } from './UnselectedList';
 
@@ -30,55 +32,68 @@ export function SelectionPage() {
     [messageApi],
   );
 
-  const unselectedPages = useParallelPageRefresh<ItemsPage, number>({
+  // TODO: Перенести вызовы хука в соответствующие компоненты списков.
+  const unselectedQuery = useSlidingWindowQuery<ItemsPage, number>({
     queryKey: itemsQueryKeys.unselected,
     initialPageParam: 0,
-    fetchPage: fetchUnselectedPage,
+    queryFn: fetchUnselectedPage,
+    getNextPageParam: getNextItemsPageParam,
+    getPreviousPageParam: getPreviousItemsPageParam,
+    maxPages: 5,
     onError: handleRefreshError,
   });
 
-  const selectedPages = useParallelPageRefresh<ItemsPage, number>({
+  const selectedQuery = useSlidingWindowQuery<ItemsPage, number>({
     queryKey: itemsQueryKeys.selected,
     initialPageParam: 0,
-    fetchPage: fetchSelectedPage,
+    queryFn: fetchSelectedPage,
+    getNextPageParam: getNextItemsPageParam,
+    getPreviousPageParam: getPreviousItemsPageParam,
+    maxPages: 5,
     onError: handleRefreshError,
   });
 
-  const {
-    cancel: cancelUnselectedRefresh,
-    scheduleRequest: scheduleUnselectedRefresh,
-  } = useDebouncedRequest({
+  const unselectedRefresh = useDebouncedRequest({
     delay: 300,
-    request: unselectedPages.refresh,
-    cancelRequest: unselectedPages.cancel,
+    request: unselectedQuery.refresh,
   });
 
-  const {
-    cancel: cancelSelectedRefresh,
-    scheduleRequest: scheduleSelectedRefresh,
-  } = useDebouncedRequest({
+  const selectedRefresh = useDebouncedRequest({
     delay: 300,
-    request: selectedPages.refresh,
-    cancelRequest: selectedPages.cancel,
+    request: selectedQuery.refresh,
   });
+
+  const prepareUnselectedRefresh = unselectedQuery.scheduleRefresh;
+  const requestUnselectedRefresh = unselectedRefresh.scheduleRequest;
+
+  const scheduleUnselectedRefresh = useCallback(() => {
+    prepareUnselectedRefresh();
+
+    requestUnselectedRefresh();
+  }, [prepareUnselectedRefresh, requestUnselectedRefresh]);
+
+  const prepareSelectedRefresh = selectedQuery.scheduleRefresh;
+  const requestSelectedRefresh = selectedRefresh.scheduleRequest;
+
+  const scheduleSelectedRefresh = useCallback(() => {
+    prepareSelectedRefresh();
+
+    requestSelectedRefresh();
+  }, [prepareSelectedRefresh, requestSelectedRefresh]);
 
   return (
     <Flex vertical gap="small">
       {contextHolder}
       <Flex gap="middle" align="stretch">
         <UnselectedList
-          cancelUnselectedRefresh={cancelUnselectedRefresh}
+          unselectedQuery={unselectedQuery}
           scheduleUnselectedRefresh={scheduleUnselectedRefresh}
-          cancelSelectedRefresh={cancelSelectedRefresh}
           scheduleSelectedRefresh={scheduleSelectedRefresh}
-          isRefreshing={unselectedPages.isRefreshing}
         />
         <SelectedList
-          cancelUnselectedRefresh={cancelUnselectedRefresh}
+          selectedQuery={selectedQuery}
           scheduleUnselectedRefresh={scheduleUnselectedRefresh}
-          cancelSelectedRefresh={cancelSelectedRefresh}
           scheduleSelectedRefresh={scheduleSelectedRefresh}
-          isRefreshing={selectedPages.isRefreshing}
         />
       </Flex>
     </Flex>

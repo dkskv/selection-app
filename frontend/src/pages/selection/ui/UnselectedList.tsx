@@ -1,9 +1,4 @@
-import {
-  getItems,
-  getNextItemsPageParam,
-  getPreviousItemsPageParam,
-  itemsQueryKeys,
-} from '../../../entities/item';
+import { createItem, selectItem, type ItemsPage } from '../../../entities/item';
 import { useState } from 'react';
 import { Button, Card, Flex, InputNumber, message, Typography } from 'antd';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
@@ -12,23 +7,20 @@ import { ListRow } from '../../../shared/ui/list-row';
 import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
 import { useMutation } from '@tanstack/react-query';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { createItem, selectItem } from '../../../entities/item';
 import { ProgressLoader } from '../../../shared/ui/progress-loader';
 import listStyles from './SelectionList.module.css';
+import { useSlidingWindowQuery } from '../../../shared/lib/react-query/useSlidingWindowQuery';
+
+type SlidingQuery = ReturnType<typeof useSlidingWindowQuery<ItemsPage, number>>;
 
 export function UnselectedList({
-  cancelUnselectedRefresh,
+  unselectedQuery,
   scheduleUnselectedRefresh,
-  cancelSelectedRefresh,
   scheduleSelectedRefresh,
-  isRefreshing,
 }: {
-  cancelUnselectedRefresh: () => void;
+  unselectedQuery: SlidingQuery;
   scheduleUnselectedRefresh: () => void;
-  cancelSelectedRefresh: () => void;
   scheduleSelectedRefresh: () => void;
-  isRefreshing: boolean;
 }) {
   const [newItemId, setNewItemId] = useState<number | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
@@ -36,8 +28,6 @@ export function UnselectedList({
   const selectMutation = useMutation({
     mutationFn: selectItem,
     onError: (error) => messageApi.error(error.message),
-    onMutate: () =>
-      Promise.all([cancelUnselectedRefresh(), cancelSelectedRefresh()]),
     onSuccess: () => {
       scheduleUnselectedRefresh();
 
@@ -48,18 +38,7 @@ export function UnselectedList({
   const createMutation = useMutation({
     mutationFn: createItem,
     onError: (error) => messageApi.error(error.message),
-    onMutate: cancelUnselectedRefresh,
     onSuccess: scheduleUnselectedRefresh,
-  });
-
-  const itemsQuery = useInfiniteQuery({
-    queryKey: itemsQueryKeys.unselected,
-    initialPageParam: 0,
-    queryFn: ({ pageParam, signal }) =>
-      getItems('unselected', pageParam, signal),
-    getNextPageParam: getNextItemsPageParam,
-    getPreviousPageParam: getPreviousItemsPageParam,
-    maxPages: 5,
   });
 
   const addItem = () => {
@@ -73,7 +52,7 @@ export function UnselectedList({
   return (
     <Card title="Unselected" className={listStyles.card}>
       {contextHolder}
-      {isRefreshing && (
+      {unselectedQuery.isRefreshing && (
         <div className={listStyles.progress}>
           <ProgressLoader />
         </div>
@@ -103,13 +82,13 @@ export function UnselectedList({
           </Flex>
         </Flex>
         <InfiniteList
-          data={itemsQuery.data}
-          isFetchingNextPage={itemsQuery.isFetchingNextPage}
-          isFetchingPreviousPage={itemsQuery.isFetchingPreviousPage}
-          hasNextPage={itemsQuery.hasNextPage}
-          hasPreviousPage={itemsQuery.hasPreviousPage}
-          fetchNextPage={itemsQuery.fetchNextPage}
-          fetchPreviousPage={itemsQuery.fetchPreviousPage}
+          data={unselectedQuery.data}
+          isFetchingNextPage={unselectedQuery.isFetchingNextPage}
+          isFetchingPreviousPage={unselectedQuery.isFetchingPreviousPage}
+          hasNextPage={unselectedQuery.hasNextPage}
+          hasPreviousPage={unselectedQuery.hasPreviousPage}
+          fetchNextPage={unselectedQuery.fetchNextPage}
+          fetchPreviousPage={unselectedQuery.fetchPreviousPage}
           getItems={(page) => page.items}
           getItemKey={(item) => item.id}
           renderItem={(item) => (

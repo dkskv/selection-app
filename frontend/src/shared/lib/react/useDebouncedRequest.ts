@@ -4,7 +4,7 @@ import debounce from 'lodash.debounce';
 type UseDebouncedRequestOptions = {
   delay: number;
   request: () => Promise<void>;
-  cancelRequest: () => void;
+  cancelRequest?: () => void;
 };
 
 export function useDebouncedRequest({
@@ -23,7 +23,7 @@ export function useDebouncedRequest({
   const cancel = useCallback(() => {
     scheduleRequest.cancel();
 
-    cancelRequest();
+    cancelRequest?.();
   }, [cancelRequest, scheduleRequest]);
 
   useEffect(() => cancel, [cancel]);

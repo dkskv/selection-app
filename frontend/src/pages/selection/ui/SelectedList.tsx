@@ -1,10 +1,7 @@
 import {
-  getItems,
-  getNextItemsPageParam,
-  getPreviousItemsPageParam,
-  itemsQueryKeys,
   deselectItem,
   reorderSelectedItem,
+  itemsQueryKeys,
   type ItemsPage,
 } from '../../../entities/item';
 import { Button, Card, Flex, message, Typography } from 'antd';
@@ -12,7 +9,6 @@ import MinusOutlined from '@ant-design/icons/MinusOutlined';
 import {
   useMutation,
   useQueryClient,
-  useInfiniteQuery,
   type InfiniteData,
 } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
@@ -32,19 +28,18 @@ import listStyles from './SelectionList.module.css';
 import { DropIndicator } from './DropIndicator';
 import { useReorderSelected } from '../model/useReorderSelected';
 import { getAfterIdFromPages } from '../model/getAfterIdFromPages';
+import { useSlidingWindowQuery } from '../../../shared/lib/react-query/useSlidingWindowQuery';
+
+type SlidingQuery = ReturnType<typeof useSlidingWindowQuery<ItemsPage, number>>;
 
 export function SelectedList({
-  cancelUnselectedRefresh,
+  selectedQuery,
   scheduleUnselectedRefresh,
-  cancelSelectedRefresh,
   scheduleSelectedRefresh,
-  isRefreshing,
 }: {
-  cancelUnselectedRefresh: () => void;
+  selectedQuery: SlidingQuery;
   scheduleUnselectedRefresh: () => void;
-  cancelSelectedRefresh: () => void;
   scheduleSelectedRefresh: () => void;
-  isRefreshing: boolean;
 }) {
   const queryClient = useQueryClient();
   const listContainerRef = useRef<HTMLDivElement>(null);
@@ -60,8 +55,6 @@ export function SelectedList({
   const deselectMutation = useMutation({
     mutationFn: deselectItem,
     onError: (error) => messageApi.error(error.message),
-    onMutate: () =>
-      Promise.all([cancelUnselectedRefresh(), cancelSelectedRefresh()]),
     onSuccess: () => {
       scheduleUnselectedRefresh();
 
@@ -70,16 +63,6 @@ export function SelectedList({
   });
 
   const handleMove = useReorderSelected();
-
-  const itemsQuery = useInfiniteQuery({
-    queryKey: itemsQueryKeys.selected,
-    initialPageParam: 0,
-    queryFn: ({ pageParam, signal }) =>
-      getItems('selected', pageParam, signal),
-    getNextPageParam: getNextItemsPageParam,
-    getPreviousPageParam: getPreviousItemsPageParam,
-    maxPages: 5,
-  });
 
   const reorderMutation = useMutation({
     mutationFn: ({
@@ -99,6 +82,7 @@ export function SelectedList({
 
       return { previousData };
     },
+    onSuccess: scheduleSelectedRefresh,
     onError: (error, _variables, context) => {
       messageApi.error(error.message);
 
@@ -129,7 +113,7 @@ export function SelectedList({
   return (
     <Card title="Selected" className={listStyles.card}>
       {contextHolder}
-      {isRefreshing && (
+      {selectedQuery.isRefreshing && (
         <div className={listStyles.progress}>
           <ProgressLoader />
         </div>
@@ -170,13 +154,13 @@ export function SelectedList({
             renderOverlay={(id) => <Typography.Text>{id}</Typography.Text>}
           >
             <InfiniteList
-              data={itemsQuery.data}
-              isFetchingNextPage={itemsQuery.isFetchingNextPage}
-              isFetchingPreviousPage={itemsQuery.isFetchingPreviousPage}
-              hasNextPage={itemsQuery.hasNextPage}
-              hasPreviousPage={itemsQuery.hasPreviousPage}
-              fetchNextPage={itemsQuery.fetchNextPage}
-              fetchPreviousPage={itemsQuery.fetchPreviousPage}
+              data={selectedQuery.data}
+              isFetchingNextPage={selectedQuery.isFetchingNextPage}
+              isFetchingPreviousPage={selectedQuery.isFetchingPreviousPage}
+              hasNextPage={selectedQuery.hasNextPage}
+              hasPreviousPage={selectedQuery.hasPreviousPage}
+              fetchNextPage={selectedQuery.fetchNextPage}
+              fetchPreviousPage={selectedQuery.fetchPreviousPage}
               getItems={(page) => page.items}
               getItemKey={(item) => item.id}
               renderItem={(item, index) => (
