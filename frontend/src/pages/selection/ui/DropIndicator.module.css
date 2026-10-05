@@ -1,0 +1,8 @@
+.indicator {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  left: 0;
+  height: 2px;
+  pointer-events: none;
+}

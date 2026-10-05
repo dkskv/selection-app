@@ -22,6 +22,10 @@ type ListDndProps = {
   children: ReactNode;
   /** Пользовательское действие после изменения позиции элемента. */
   onMove: (move: ListMove) => void;
+  /** Показывает позицию вставки во время перетаскивания. */
+  onDropTargetChange?: (
+    target: { move: ListMove; element: Element } | null,
+  ) => void;
   /** Дополнительная обработка наведения на цель переноса. */
   onDragOver?: DragDropEventHandlers['onDragOver'];
   /** Отображение копии перетаскиваемого элемента. */
@@ -32,16 +36,51 @@ type ListDndProps = {
 export function ListDnd({
   children,
   onMove,
+  onDropTargetChange,
   onDragOver,
   renderOverlay,
 }: ListDndProps) {
   return (
     <DragDropProvider
-      onDragOver={onDragOver}
+      onDragOver={(event, manager) => {
+        onDragOver?.(event, manager);
+
+        const { source, target } = event.operation;
+
+        if (
+          onDropTargetChange &&
+          isSortable(source) &&
+          isSortable(target) &&
+          source.id !== target.id
+        ) {
+          const element = target.sortable.element;
+
+          if (element) {
+            onDropTargetChange({
+              move: {
+                id: source.id,
+                fromIndex: source.initialIndex,
+                toIndex: target.index,
+              },
+              element,
+            });
+          }
+        } else {
+          onDropTargetChange?.(null);
+        }
+      }}
       onDragEnd={(event) => {
         const { source, target } = event.operation;
 
-        if (event.canceled || !isSortable(source) || !isSortable(target)) {
+        if (event.canceled) {
+          onDropTargetChange?.(null);
+
+          return;
+        }
+
+        if (!isSortable(source) || !isSortable(target)) {
+          onDropTargetChange?.(null);
+
           return;
         }
 
@@ -49,6 +88,8 @@ export function ListDnd({
         const toIndex = source.id === target.id ? source.index : target.index;
 
         if (source.initialIndex === toIndex) {
+          onDropTargetChange?.(null);
+
           return;
         }
 
@@ -57,6 +98,8 @@ export function ListDnd({
           fromIndex: source.initialIndex,
           toIndex,
         });
+
+        onDropTargetChange?.(null);
       }}
     >
       {children}

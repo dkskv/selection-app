@@ -14,14 +14,23 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query';
+import { useRef, useState } from 'react';
 import { InfiniteList } from '../../../shared/ui/infinite-list';
 import { ListRow } from '../../../shared/ui/list-row';
 import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
-import { ListDnd, SortableItem, DragHandle } from '../../../shared/ui/list-dnd';
-import { useReorderSelected } from '../model/useReorderSelected';
+import {
+  ListDnd,
+  SortableItem,
+  DragHandle,
+  type ListMove,
+} from '../../../shared/ui/list-dnd';
 import { ProgressLoader } from '../../../shared/ui/progress-loader';
+import { getRelativeRect } from '../../../shared/lib/dom';
 import listStyles from './SelectionList.module.css';
+import { DropIndicator } from './DropIndicator';
+import { useReorderSelected } from '../model/useReorderSelected';
+import { getAfterIdFromPages } from '../model/getAfterIdFromPages';
 
 export function SelectedList({
   cancelUnselectedRefresh,
@@ -37,6 +46,14 @@ export function SelectedList({
   isRefreshing: boolean;
 }) {
   const queryClient = useQueryClient();
+  const listContainerRef = useRef<HTMLDivElement>(null);
+
+  const [dropIndicatorPosition, setDropIndicatorPosition] = useState<{
+    top: number;
+    left: number;
+    right: number;
+  } | null>(null);
+
   const [messageApi, contextHolder] = message.useMessage();
 
   const deselectMutation = useMutation({
@@ -54,22 +71,42 @@ export function SelectedList({
   const handleMove = useReorderSelected();
 
   const reorderMutation = useMutation({
-    mutationFn: ({ itemId, afterId }: {
+    mutationFn: ({
+      itemId,
+      afterId,
+    }: {
       itemId: number;
       afterId: number | null;
-      move: Parameters<typeof handleMove>[0];
+      move: ListMove;
     }) => reorderSelectedItem(itemId, afterId),
-    onMutate: ({ move }) => handleMove(move),
-    onError: (error) => messageApi.error(error.message),
+    onMutate: ({ move }) => {
+      const previousData = queryClient.getQueryData<
+        InfiniteData<ItemsPage, number>
+      >(itemsQueryKeys.selected);
+
+      handleMove(move);
+
+      return { previousData };
+    },
+    onError: (error, _variables, context) => {
+      messageApi.error(error.message);
+
+      if (context?.previousData) {
+        queryClient.setQueryData(itemsQueryKeys.selected, context.previousData);
+      }
+    },
   });
 
-  const moveSelectedItem = (move: Parameters<typeof handleMove>[0]) => {
+  const moveSelectedItem = (move: ListMove) => {
     const data = queryClient.getQueryData<InfiniteData<ItemsPage, number>>(
       itemsQueryKeys.selected,
     );
 
-    const items = data?.pages.flatMap((page) => page.items) ?? [];
-    const afterId = move.toIndex === 0 ? null : items[move.toIndex - 1]?.id ?? null;
+    const afterId = getAfterIdFromPages(
+      data?.pages,
+      Number(move.id),
+      move.toIndex,
+    );
 
     reorderMutation.mutate({
       itemId: Number(move.id),
@@ -92,72 +129,89 @@ export function SelectedList({
             <SearchInput />
           </div>
         </Flex>
-        <ListDnd
-          onMove={moveSelectedItem}
-          // Позициями строк управляет виртуализатор, поэтому отключаем перестановку DOM во время переноса.
-          onDragOver={(event) => event.preventDefault()}
-          renderOverlay={(id) => {
-            const data = queryClient.getQueryData<
-              InfiniteData<ItemsPage, number>
-            >(itemsQueryKeys.selected);
+        <div className={listStyles.dragArea} ref={listContainerRef}>
+          <ListDnd
+            onMove={moveSelectedItem}
+            onDropTargetChange={(target) => {
+              if (!target || !listContainerRef.current) {
+                setDropIndicatorPosition(null);
 
-            const item = data?.pages
-              .flatMap((page) => page.items)
-              .find((item) => item.id === id);
+                return;
+              }
 
-            return <Typography.Text>{item?.id}</Typography.Text>;
-          }}
-        >
-          <InfiniteList
-            queryKey={itemsQueryKeys.selected}
-            initialPageParam={0}
-            queryFn={({ pageParam, signal }) =>
-              getItems('selected', pageParam, signal)
-            }
-            getNextPageParam={getNextItemsPageParam}
-            getPreviousPageParam={getPreviousItemsPageParam}
-            getItems={(page) => page.items}
-            getItemKey={(item) => item.id}
-            renderItem={(item, index) => (
-              <SortableItem id={item.id} index={index}>
-                {(handleRef) => (
-                  <ListRow
-                    action={
-                      <Button
-                        size="small"
-                        icon={<MinusOutlined />}
-                        aria-label={`Удалить ${item.id}`}
-                        loading={
-                          deselectMutation.isPending &&
-                          deselectMutation.variables === item.id
-                        }
-                        disabled={
-                          deselectMutation.isPending &&
-                          deselectMutation.variables === item.id
-                        }
-                        onClick={() => deselectMutation.mutate(item.id)}
-                      />
-                    }
-                  >
-                    <Flex align="center" gap="small" style={{ minWidth: 0 }}>
-                      <DragHandle
-                        ref={handleRef}
-                        label={`Переместить ${item.id}`}
-                        loading={
-                          reorderMutation.isPending &&
-                          reorderMutation.variables.itemId === item.id
-                        }
-                      />
-                      <Typography.Text ellipsis style={{ minWidth: 0 }}>
-                        {item.id}
-                      </Typography.Text>
-                    </Flex>
-                  </ListRow>
-                )}
-              </SortableItem>
-            )}
-          />
-        </ListDnd>
+              const targetPosition = getRelativeRect(
+                target.element,
+                listContainerRef.current,
+              );
+
+              const insertAfter = target.move.fromIndex < target.move.toIndex;
+
+              setDropIndicatorPosition({
+                top:
+                  targetPosition.top +
+                  (insertAfter ? targetPosition.height : 0),
+                left: targetPosition.left,
+                right: targetPosition.right,
+              });
+            }}
+            // Позициями строк управляет виртуализатор, поэтому отключаем перестановку DOM во время переноса.
+            onDragOver={(event) => event.preventDefault()}
+            renderOverlay={(id) => <Typography.Text>{id}</Typography.Text>}
+          >
+            <InfiniteList
+              queryKey={itemsQueryKeys.selected}
+              initialPageParam={0}
+              queryFn={({ pageParam, signal }) =>
+                getItems('selected', pageParam, signal)
+              }
+              getNextPageParam={getNextItemsPageParam}
+              getPreviousPageParam={getPreviousItemsPageParam}
+              getItems={(page) => page.items}
+              getItemKey={(item) => item.id}
+              renderItem={(item, index) => (
+                <SortableItem id={item.id} index={index}>
+                  {(handleRef) => (
+                    <ListRow
+                      action={
+                        <Button
+                          size="small"
+                          icon={<MinusOutlined />}
+                          aria-label={`Удалить ${item.id}`}
+                          loading={
+                            deselectMutation.isPending &&
+                            deselectMutation.variables === item.id
+                          }
+                          disabled={
+                            deselectMutation.isPending &&
+                            deselectMutation.variables === item.id
+                          }
+                          onClick={() => deselectMutation.mutate(item.id)}
+                        />
+                      }
+                    >
+                      <Flex align="center" gap="small" style={{ minWidth: 0 }}>
+                        <DragHandle
+                          ref={handleRef}
+                          label={`Move ${item.id}`}
+                          loading={
+                            reorderMutation.isPending &&
+                            reorderMutation.variables.itemId === item.id
+                          }
+                        />
+                        <Typography.Text ellipsis style={{ minWidth: 0 }}>
+                          {item.id}
+                        </Typography.Text>
+                      </Flex>
+                    </ListRow>
+                  )}
+                </SortableItem>
+              )}
+            />
+          </ListDnd>
+          {dropIndicatorPosition !== null && (
+            <DropIndicator {...dropIndicatorPosition} />
+          )}
+        </div>
       </Flex>
     </Card>
   );
