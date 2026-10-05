@@ -15,10 +15,14 @@ type SlidingQuery = ReturnType<typeof useSlidingWindowQuery<ItemsPage, number>>;
 
 export function UnselectedList({
   unselectedQuery,
+  search,
+  onSearchChange,
   scheduleUnselectedRefresh,
   scheduleSelectedRefresh,
 }: {
   unselectedQuery: SlidingQuery;
+  search: string;
+  onSearchChange: (value: string) => void;
   scheduleUnselectedRefresh: () => void;
   scheduleSelectedRefresh: () => void;
 }) {
@@ -66,7 +70,7 @@ export function UnselectedList({
       <Flex vertical gap="middle">
         <Flex gap={8} wrap>
           <div className={controls.half}>
-            <SearchInput />
+            <SearchInput value={search} onChange={onSearchChange} />
           </div>
           <Flex gap={8} className={controls.half}>
             <InputNumber
@@ -91,6 +95,8 @@ export function UnselectedList({
           data={unselectedQuery.data}
           isFetchingNextPage={unselectedQuery.isFetchingNextPage}
           isFetchingPreviousPage={unselectedQuery.isFetchingPreviousPage}
+          isDataLoading={unselectedQuery.isPlaceholderData || unselectedQuery.isRefreshing}
+          resetScrollKey={search}
           hasNextPage={unselectedQuery.hasNextPage}
           hasPreviousPage={unselectedQuery.hasPreviousPage}
           fetchNextPage={unselectedQuery.fetchNextPage}

@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   useQuery,
   useQueryClient,
@@ -37,6 +43,7 @@ type RefreshOperation = {
 
 type State = {
   isRefreshing: boolean;
+  isChangingKey: boolean;
   expanding: Record<Direction, boolean>;
 };
 
@@ -93,6 +100,11 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
   onError,
 }: UseSlidingWindowQueryOptions<TPage, TPageParam>) {
   const queryClient = useQueryClient();
+  const contextRef = useRef({ queryKey, queryFn });
+
+  useLayoutEffect(() => {
+    contextRef.current = { queryKey, queryFn };
+  }, [queryFn, queryKey]);
 
   const query = useQuery<InfiniteData<TPage, TPageParam>>({
     queryKey,
@@ -100,6 +112,7 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
       throw new Error('This query is managed by useSlidingWindowQuery.');
     },
     enabled: false,
+    placeholderData: (previousData) => previousData,
   });
 
   const logicalWindow = useRef<TPageParam[]>(
@@ -116,8 +129,17 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
   const expansions = useRef<Partial<Record<Direction, ExpandOperation>>>({});
   const expandEpoch = useRef(0);
 
+  const queryHash = queryClient
+    .getQueryCache()
+    .find({ queryKey, exact: true })?.queryHash;
+
+  const currentKeyHash = useRef(queryHash);
+
+  const emptyLoadKeyHash = useRef<string | undefined>(undefined);
+
   const [state, setState] = useState<State>({
     isRefreshing: false,
+    isChangingKey: false,
     expanding: { next: false, previous: false },
   });
 
@@ -140,22 +162,40 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
     );
   }, []);
 
-  const prepareRefresh = useCallback(() => {
-    const operation = {
-      id: ++latestRefreshId.current,
-      revision: ++revision.current,
-    };
+  const prepareRefresh = useCallback(
+    (invalidateOtherKeys = true) => {
+      const activeKey = contextRef.current.queryKey;
 
-    invalidateExpansions();
+      if (invalidateOtherKeys) {
+        const currentHash = queryClient.getQueryCache().find({
+          queryKey: activeKey,
+          exact: true,
+        })?.queryHash;
 
-    refreshController.current?.abort();
+        queryClient.removeQueries({
+          predicate: (candidate) =>
+            candidate.queryKey[0] === activeKey[0] &&
+            candidate.queryHash !== currentHash,
+        });
+      }
 
-    scheduledRefresh.current = operation;
+      const operation = {
+        id: ++latestRefreshId.current,
+        revision: ++revision.current,
+      };
 
-    setState((current) => ({ ...current, isRefreshing: true }));
+      invalidateExpansions();
 
-    return operation;
-  }, [invalidateExpansions]);
+      refreshController.current?.abort();
+
+      scheduledRefresh.current = operation;
+
+      setState((current) => ({ ...current, isRefreshing: true }));
+
+      return operation;
+    },
+    [invalidateExpansions, queryClient],
+  );
 
   const scheduleRefresh = useCallback(() => {
     prepareRefresh();
@@ -163,6 +203,8 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
 
   const refresh = useCallback(async () => {
     const operation = scheduledRefresh.current ?? prepareRefresh();
+    const activeKey = contextRef.current.queryKey;
+    const activeQueryFn = contextRef.current.queryFn;
 
     scheduledRefresh.current = null;
 
@@ -173,17 +215,17 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
 
     try {
       const pages = await Promise.all(
-        pageParams.map((param) => queryFn(param, controller.signal)),
+        pageParams.map((param) => activeQueryFn(param, controller.signal)),
       );
 
       if (controller.signal.aborted || operation.id !== latestRefreshId.current)
         return;
 
       const cached =
-        queryClient.getQueryData<InfiniteData<TPage, TPageParam>>(queryKey);
+        queryClient.getQueryData<InfiniteData<TPage, TPageParam>>(activeKey);
 
       queryClient.setQueryData(
-        queryKey,
+        activeKey,
         mergePages(cached, logicalWindow.current, pageParams, pages),
       );
     } catch (error) {
@@ -198,6 +240,7 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
 
         setState((current) => ({
           isRefreshing: false,
+          isChangingKey: false,
           expanding: {
             next:
               current.expanding.next &&
@@ -219,16 +262,21 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
         });
       }
     }
-  }, [prepareRefresh, queryClient, queryFn, queryKey, reportError]);
+  }, [prepareRefresh, queryClient, reportError]);
 
   const expand = useCallback(
     async (direction: Direction) => {
+      const activeKey = contextRef.current.queryKey;
+      const activeQueryFn = contextRef.current.queryFn;
+
+      if (state.isChangingKey || query.isPlaceholderData) return;
+
       const active = expansions.current[direction];
 
       if (active) return active.promise;
 
       const data =
-        queryClient.getQueryData<InfiniteData<TPage, TPageParam>>(queryKey);
+        queryClient.getQueryData<InfiniteData<TPage, TPageParam>>(activeKey);
 
       const params = data?.pageParams ?? [];
       const pages = data?.pages ?? [];
@@ -305,7 +353,10 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
 
       operation.promise = (async () => {
         try {
-          const page = await queryFn(pageParam, operation.controller.signal);
+          const page = await activeQueryFn(
+            pageParam,
+            operation.controller.signal,
+          );
 
           if (
             operation.controller.signal.aborted ||
@@ -315,10 +366,12 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
             return;
 
           const cached =
-            queryClient.getQueryData<InfiniteData<TPage, TPageParam>>(queryKey);
+            queryClient.getQueryData<InfiniteData<TPage, TPageParam>>(
+              activeKey,
+            );
 
           queryClient.setQueryData(
-            queryKey,
+            activeKey,
             mergePages(cached, logicalWindow.current, [pageParam], [page]),
           );
         } catch (error) {
@@ -353,15 +406,92 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
       getPreviousPageParam,
       maxPages,
       queryClient,
-      queryFn,
-      queryKey,
       reportError,
+      query.isPlaceholderData,
+      state.isChangingKey,
     ],
   );
 
   useEffect(() => {
-    if (!query.data) void refresh();
-  }, [query.data, refresh]);
+    const nextHash = queryHash;
+
+    if (currentKeyHash.current !== nextHash) {
+      currentKeyHash.current = nextHash;
+
+      emptyLoadKeyHash.current = undefined;
+
+      revision.current += 1;
+
+      latestRefreshId.current += 1;
+
+      refreshController.current?.abort();
+
+      invalidateExpansions();
+
+      expansions.current = {};
+
+      scheduledRefresh.current = null;
+
+      const cached = queryClient.getQueryData<InfiniteData<TPage, TPageParam>>(
+        contextRef.current.queryKey,
+      );
+
+      const initialPageIndex =
+        cached?.pageParams.findIndex((param) =>
+          Object.is(param, initialPageParam),
+        ) ?? -1;
+
+      logicalWindow.current = [initialPageParam];
+
+      if (initialPageIndex >= 0 && cached) {
+        queryClient.setQueryData(contextRef.current.queryKey, {
+          pages: [cached.pages[initialPageIndex]],
+          pageParams: [initialPageParam],
+        });
+      } else if (cached) {
+        queryClient.setQueryData(contextRef.current.queryKey, {
+          pages: [],
+          pageParams: [],
+        });
+      }
+
+      setState({
+        isRefreshing: initialPageIndex < 0,
+        isChangingKey: initialPageIndex < 0,
+        expanding: { next: false, previous: false },
+      });
+
+      if (initialPageIndex < 0) {
+        emptyLoadKeyHash.current = nextHash;
+
+        queueMicrotask(() => {
+          prepareRefresh(false);
+
+          refresh();
+        });
+      }
+
+      return;
+    }
+
+    if (
+      !query.data &&
+      !refreshController.current &&
+      emptyLoadKeyHash.current !== nextHash
+    ) {
+      emptyLoadKeyHash.current = nextHash;
+
+      refresh();
+    }
+  }, [
+    initialPageParam,
+    invalidateExpansions,
+    prepareRefresh,
+    query.data,
+    queryClient,
+    queryHash,
+    refresh,
+  ]);
 
   useEffect(
     () => () => {
@@ -370,6 +500,12 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
       latestRefreshId.current += 1;
 
       refreshController.current?.abort();
+
+      refreshController.current = null;
+
+      scheduledRefresh.current = null;
+
+      emptyLoadKeyHash.current = undefined;
 
       Object.values(expansions.current).forEach((operation) =>
         operation?.controller.abort(),

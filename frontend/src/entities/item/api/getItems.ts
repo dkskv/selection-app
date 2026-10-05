@@ -6,9 +6,14 @@ export async function getItems(
   selection: 'selected' | 'unselected',
   offset: number,
   signal: AbortSignal,
+  search = '',
 ): Promise<ItemsPage> {
+  const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+
+  if (search) params.set('idPrefixFilter', search);
+
   const response = await fetch(
-    `/api/items/${selection}?limit=${PAGE_SIZE}&offset=${offset}`,
+    `/api/items/${selection}?${params}`,
     { signal },
   );
 

@@ -1,4 +1,4 @@
-import { useRef, type Key, type ReactNode } from 'react';
+import { useEffect, useRef, type Key, type ReactNode } from 'react';
 import type { InfiniteData } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteListScroll } from './useInfiniteListScroll';
@@ -9,6 +9,8 @@ export type InfiniteListProps<TPage, TItem, TPageParam> = {
   data: InfiniteData<TPage, TPageParam> | undefined;
   isFetchingNextPage: boolean;
   isFetchingPreviousPage: boolean;
+  isDataLoading: boolean;
+  resetScrollKey: unknown;
   hasNextPage: boolean;
   hasPreviousPage: boolean;
   fetchNextPage: () => Promise<unknown>;
@@ -28,6 +30,8 @@ export function InfiniteList<TPage, TItem, TPageParam>({
   data,
   isFetchingNextPage,
   isFetchingPreviousPage,
+  isDataLoading,
+  resetScrollKey,
   hasNextPage,
   hasPreviousPage,
   fetchNextPage,
@@ -37,6 +41,8 @@ export function InfiniteList<TPage, TItem, TPageParam>({
   renderItem,
 }: InfiniteListProps<TPage, TItem, TPageParam>) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const previousScrollKey = useRef(resetScrollKey);
+  const pendingScrollReset = useRef(false);
 
   const items = data?.pages.flatMap(getItems) ?? [];
 
@@ -49,6 +55,20 @@ export function InfiniteList<TPage, TItem, TPageParam>({
     // Сохраняет видимую строку при добавлении страницы сверху и вытеснении страниц с края.
     anchorTo: 'end',
   });
+
+  useEffect(() => {
+    if (!Object.is(previousScrollKey.current, resetScrollKey)) {
+      previousScrollKey.current = resetScrollKey;
+
+      pendingScrollReset.current = true;
+    }
+
+    if (pendingScrollReset.current && !isDataLoading) {
+      virtualizer.scrollToOffset(0);
+
+      pendingScrollReset.current = false;
+    }
+  }, [isDataLoading, resetScrollKey, virtualizer]);
 
   const virtualRows = virtualizer.getVirtualItems();
 

@@ -1,7 +1,6 @@
 import {
   deselectItem,
   reorderSelectedItem,
-  itemsQueryKeys,
   type ItemsPage,
 } from '../../../entities/item';
 import { Button, Card, Flex, message, Typography } from 'antd';
@@ -35,10 +34,16 @@ type SlidingQuery = ReturnType<typeof useSlidingWindowQuery<ItemsPage, number>>;
 
 export function SelectedList({
   selectedQuery,
+  selectedQueryKey,
+  search,
+  onSearchChange,
   scheduleUnselectedRefresh,
   scheduleSelectedRefresh,
 }: {
   selectedQuery: SlidingQuery;
+  selectedQueryKey: readonly unknown[];
+  search: string;
+  onSearchChange: (value: string) => void;
   scheduleUnselectedRefresh: () => void;
   scheduleSelectedRefresh: () => void;
 }) {
@@ -83,7 +88,7 @@ export function SelectedList({
     onMutate: ({ move }) => {
       const previousData = queryClient.getQueryData<
         InfiniteData<ItemsPage, number>
-      >(itemsQueryKeys.selected);
+      >(selectedQueryKey);
 
       handleMove(move);
 
@@ -94,14 +99,14 @@ export function SelectedList({
       messageApi.error(error.message);
 
       if (context?.previousData) {
-        queryClient.setQueryData(itemsQueryKeys.selected, context.previousData);
+        queryClient.setQueryData(selectedQueryKey, context.previousData);
       }
     },
   });
 
   const moveSelectedItem = (move: ListMove) => {
     const data = queryClient.getQueryData<InfiniteData<ItemsPage, number>>(
-      itemsQueryKeys.selected,
+      selectedQueryKey,
     );
 
     const afterId = getAfterIdFromPages(
@@ -128,7 +133,7 @@ export function SelectedList({
       <Flex vertical gap="middle">
         <Flex gap={8} wrap>
           <div className={controls.half}>
-            <SearchInput />
+            <SearchInput value={search} onChange={onSearchChange} />
           </div>
         </Flex>
         <div className={listStyles.dragArea} ref={listContainerRef}>
@@ -164,6 +169,8 @@ export function SelectedList({
               data={selectedQuery.data}
               isFetchingNextPage={selectedQuery.isFetchingNextPage}
               isFetchingPreviousPage={selectedQuery.isFetchingPreviousPage}
+              isDataLoading={selectedQuery.isPlaceholderData || selectedQuery.isRefreshing}
+              resetScrollKey={search}
               hasNextPage={selectedQuery.hasNextPage}
               hasPreviousPage={selectedQuery.hasPreviousPage}
               fetchNextPage={selectedQuery.fetchNextPage}

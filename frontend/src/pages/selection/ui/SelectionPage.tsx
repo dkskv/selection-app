@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Flex, message } from 'antd';
 import { useDebouncedRequest } from '../../../shared/lib/react/useDebouncedRequest';
 import {
@@ -13,18 +13,20 @@ import { SelectedList } from './SelectedList';
 import { UnselectedList } from './UnselectedList';
 
 export function SelectionPage() {
+  const [unselectedSearch, setUnselectedSearch] = useState('');
+  const [selectedSearch, setSelectedSearch] = useState('');
   const [messageApi, contextHolder] = message.useMessage();
 
   const fetchUnselectedPage = useCallback(
     (pageParam: number, signal: AbortSignal) =>
-      getItems('unselected', pageParam, signal),
-    [],
+      getItems('unselected', pageParam, signal, unselectedSearch),
+    [unselectedSearch],
   );
 
   const fetchSelectedPage = useCallback(
     (pageParam: number, signal: AbortSignal) =>
-      getItems('selected', pageParam, signal),
-    [],
+      getItems('selected', pageParam, signal, selectedSearch),
+    [selectedSearch],
   );
 
   const handleRefreshError = useCallback(
@@ -34,7 +36,7 @@ export function SelectionPage() {
 
   // TODO: Перенести вызовы хука в соответствующие компоненты списков.
   const unselectedQuery = useSlidingWindowQuery<ItemsPage, number>({
-    queryKey: itemsQueryKeys.unselected,
+    queryKey: [...itemsQueryKeys.unselected, unselectedSearch],
     initialPageParam: 0,
     queryFn: fetchUnselectedPage,
     getNextPageParam: getNextItemsPageParam,
@@ -44,7 +46,7 @@ export function SelectionPage() {
   });
 
   const selectedQuery = useSlidingWindowQuery<ItemsPage, number>({
-    queryKey: itemsQueryKeys.selected,
+    queryKey: [...itemsQueryKeys.selected, selectedSearch],
     initialPageParam: 0,
     queryFn: fetchSelectedPage,
     getNextPageParam: getNextItemsPageParam,
@@ -87,11 +89,16 @@ export function SelectionPage() {
       <Flex gap="middle" align="stretch">
         <UnselectedList
           unselectedQuery={unselectedQuery}
+          search={unselectedSearch}
+          onSearchChange={setUnselectedSearch}
           scheduleUnselectedRefresh={scheduleUnselectedRefresh}
           scheduleSelectedRefresh={scheduleSelectedRefresh}
         />
         <SelectedList
           selectedQuery={selectedQuery}
+          selectedQueryKey={[...itemsQueryKeys.selected, selectedSearch]}
+          search={selectedSearch}
+          onSearchChange={setSelectedSearch}
           scheduleUnselectedRefresh={scheduleUnselectedRefresh}
           scheduleSelectedRefresh={scheduleSelectedRefresh}
         />
