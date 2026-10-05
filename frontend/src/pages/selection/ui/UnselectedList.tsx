@@ -1,8 +1,12 @@
 import { createItem, selectItem, type ItemsPage } from '../../../entities/item';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button, Card, Flex, InputNumber, message, Typography } from 'antd';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
-import { InfiniteList } from '../../../shared/ui/infinite-list';
+import {
+  InfiniteList,
+  type InfiniteListHandle,
+  useResetInfiniteListScroll,
+} from '../../../shared/ui/infinite-list';
 import { ListRow } from '../../../shared/ui/list-row';
 import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
@@ -27,7 +31,14 @@ export function UnselectedList({
   scheduleSelectedRefresh: () => void;
 }) {
   const [newItemId, setNewItemId] = useState<number | null>(null);
+  const listRef = useRef<InfiniteListHandle>(null);
   const [messageApi, contextHolder] = message.useMessage();
+
+  useResetInfiniteListScroll({
+    listRef,
+    scrollKey: search,
+    isLoading: unselectedQuery.isPlaceholderData || unselectedQuery.isRefreshing,
+  });
 
   const pendingSelectedItemIds = useMutationState<number>({
     filters: { mutationKey: ['select-item'], status: 'pending' },
@@ -92,11 +103,10 @@ export function UnselectedList({
           </Flex>
         </Flex>
         <InfiniteList
+          ref={listRef}
           data={unselectedQuery.data}
           isFetchingNextPage={unselectedQuery.isFetchingNextPage}
           isFetchingPreviousPage={unselectedQuery.isFetchingPreviousPage}
-          isDataLoading={unselectedQuery.isPlaceholderData || unselectedQuery.isRefreshing}
-          resetScrollKey={search}
           hasNextPage={unselectedQuery.hasNextPage}
           hasPreviousPage={unselectedQuery.hasPreviousPage}
           fetchNextPage={unselectedQuery.fetchNextPage}

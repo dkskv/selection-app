@@ -1,4 +1,4 @@
-import { useEffect, useRef, type Key, type ReactNode } from 'react';
+import { useImperativeHandle, useRef, type Key, type ReactNode, type Ref } from 'react';
 import type { InfiniteData } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteListScroll } from './useInfiniteListScroll';
@@ -6,11 +6,10 @@ import styles from './InfiniteList.module.css';
 import { ProgressLoader } from '../progress-loader';
 
 export type InfiniteListProps<TPage, TItem, TPageParam> = {
+  ref?: Ref<InfiniteListHandle>;
   data: InfiniteData<TPage, TPageParam> | undefined;
   isFetchingNextPage: boolean;
   isFetchingPreviousPage: boolean;
-  isDataLoading: boolean;
-  resetScrollKey: unknown;
   hasNextPage: boolean;
   hasPreviousPage: boolean;
   fetchNextPage: () => Promise<unknown>;
@@ -20,6 +19,10 @@ export type InfiniteListProps<TPage, TItem, TPageParam> = {
   renderItem: (item: TItem, index: number) => ReactNode;
 };
 
+export type InfiniteListHandle = {
+  resetScroll: () => void;
+};
+
 /** Фиксированная высота строки в пикселях для расчёта виртуализации. */
 const ROW_HEIGHT = 40;
 
@@ -27,11 +30,10 @@ const ROW_HEIGHT = 40;
 const OVERSCAN = 5;
 
 export function InfiniteList<TPage, TItem, TPageParam>({
+  ref,
   data,
   isFetchingNextPage,
   isFetchingPreviousPage,
-  isDataLoading,
-  resetScrollKey,
   hasNextPage,
   hasPreviousPage,
   fetchNextPage,
@@ -41,8 +43,6 @@ export function InfiniteList<TPage, TItem, TPageParam>({
   renderItem,
 }: InfiniteListProps<TPage, TItem, TPageParam>) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const previousScrollKey = useRef(resetScrollKey);
-  const pendingScrollReset = useRef(false);
 
   const items = data?.pages.flatMap(getItems) ?? [];
 
@@ -56,19 +56,11 @@ export function InfiniteList<TPage, TItem, TPageParam>({
     anchorTo: 'end',
   });
 
-  useEffect(() => {
-    if (!Object.is(previousScrollKey.current, resetScrollKey)) {
-      previousScrollKey.current = resetScrollKey;
-
-      pendingScrollReset.current = true;
-    }
-
-    if (pendingScrollReset.current && !isDataLoading) {
-      virtualizer.scrollToOffset(0);
-
-      pendingScrollReset.current = false;
-    }
-  }, [isDataLoading, resetScrollKey, virtualizer]);
+  useImperativeHandle(
+    ref,
+    () => ({ resetScroll: () => virtualizer.scrollToOffset(0) }),
+    [virtualizer],
+  );
 
   const virtualRows = virtualizer.getVirtualItems();
 

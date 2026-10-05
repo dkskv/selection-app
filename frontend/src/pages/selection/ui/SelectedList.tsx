@@ -12,7 +12,11 @@ import {
   type InfiniteData,
 } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
-import { InfiniteList } from '../../../shared/ui/infinite-list';
+import {
+  InfiniteList,
+  type InfiniteListHandle,
+  useResetInfiniteListScroll,
+} from '../../../shared/ui/infinite-list';
 import { ListRow } from '../../../shared/ui/list-row';
 import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
@@ -49,6 +53,13 @@ export function SelectedList({
 }) {
   const queryClient = useQueryClient();
   const listContainerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<InfiniteListHandle>(null);
+
+  useResetInfiniteListScroll({
+    listRef,
+    scrollKey: search,
+    isLoading: selectedQuery.isPlaceholderData || selectedQuery.isRefreshing,
+  });
 
   const [dropIndicatorPosition, setDropIndicatorPosition] = useState<{
     top: number;
@@ -167,11 +178,10 @@ export function SelectedList({
             renderOverlay={(id) => <Typography.Text>{id}</Typography.Text>}
           >
             <InfiniteList
+              ref={listRef}
               data={selectedQuery.data}
               isFetchingNextPage={selectedQuery.isFetchingNextPage}
               isFetchingPreviousPage={selectedQuery.isFetchingPreviousPage}
-              isDataLoading={selectedQuery.isPlaceholderData || selectedQuery.isRefreshing}
-              resetScrollKey={search}
               hasNextPage={selectedQuery.hasNextPage}
               hasPreviousPage={selectedQuery.hasPreviousPage}
               fetchNextPage={selectedQuery.fetchNextPage}
