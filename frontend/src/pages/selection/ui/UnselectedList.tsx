@@ -79,11 +79,11 @@ export function UnselectedList({
         </div>
       )}
       <Flex vertical gap="middle">
-        <Flex gap={8} wrap>
-          <div className={controls.half}>
+        <Flex justify="space-between" gap={16} wrap>
+          <div className={controls.control}>
             <SearchInput value={search} onChange={onSearchChange} />
           </div>
-          <Flex gap={8} className={controls.half}>
+          <Flex gap={8} className={controls.control}>
             <InputNumber
               aria-label="Название элемента"
               className={controls.addInput}

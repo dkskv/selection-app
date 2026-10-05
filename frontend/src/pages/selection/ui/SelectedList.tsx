@@ -143,8 +143,8 @@ export function SelectedList({
         </div>
       )}
       <Flex vertical gap="middle">
-        <Flex gap={8} wrap>
-          <div className={controls.half}>
+        <Flex justify="space-between" gap={16} wrap>
+          <div className={controls.control}>
             <SearchInput value={search} onChange={onSearchChange} />
           </div>
         </Flex>
