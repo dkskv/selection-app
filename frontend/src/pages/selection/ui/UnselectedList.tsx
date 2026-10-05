@@ -12,6 +12,7 @@ import { ListRow } from '../../../shared/ui/list-row';
 import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
 import { useMutation } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { createItem, selectItem } from '../../../entities/item';
 import { ProgressLoader } from '../../../shared/ui/progress-loader';
 import listStyles from './SelectionList.module.css';
@@ -49,6 +50,16 @@ export function UnselectedList({
     onError: (error) => messageApi.error(error.message),
     onMutate: cancelUnselectedRefresh,
     onSuccess: scheduleUnselectedRefresh,
+  });
+
+  const itemsQuery = useInfiniteQuery({
+    queryKey: itemsQueryKeys.unselected,
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      getItems('unselected', pageParam, signal),
+    getNextPageParam: getNextItemsPageParam,
+    getPreviousPageParam: getPreviousItemsPageParam,
+    maxPages: 5,
   });
 
   const addItem = () => {
@@ -92,13 +103,13 @@ export function UnselectedList({
           </Flex>
         </Flex>
         <InfiniteList
-          queryKey={itemsQueryKeys.unselected}
-          initialPageParam={0}
-          queryFn={({ pageParam, signal }) =>
-            getItems('unselected', pageParam, signal)
-          }
-          getNextPageParam={getNextItemsPageParam}
-          getPreviousPageParam={getPreviousItemsPageParam}
+          data={itemsQuery.data}
+          isFetchingNextPage={itemsQuery.isFetchingNextPage}
+          isFetchingPreviousPage={itemsQuery.isFetchingPreviousPage}
+          hasNextPage={itemsQuery.hasNextPage}
+          hasPreviousPage={itemsQuery.hasPreviousPage}
+          fetchNextPage={itemsQuery.fetchNextPage}
+          fetchPreviousPage={itemsQuery.fetchPreviousPage}
           getItems={(page) => page.items}
           getItemKey={(item) => item.id}
           renderItem={(item) => (

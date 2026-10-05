@@ -12,6 +12,7 @@ import MinusOutlined from '@ant-design/icons/MinusOutlined';
 import {
   useMutation,
   useQueryClient,
+  useInfiniteQuery,
   type InfiniteData,
 } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
@@ -69,6 +70,16 @@ export function SelectedList({
   });
 
   const handleMove = useReorderSelected();
+
+  const itemsQuery = useInfiniteQuery({
+    queryKey: itemsQueryKeys.selected,
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      getItems('selected', pageParam, signal),
+    getNextPageParam: getNextItemsPageParam,
+    getPreviousPageParam: getPreviousItemsPageParam,
+    maxPages: 5,
+  });
 
   const reorderMutation = useMutation({
     mutationFn: ({
@@ -159,13 +170,13 @@ export function SelectedList({
             renderOverlay={(id) => <Typography.Text>{id}</Typography.Text>}
           >
             <InfiniteList
-              queryKey={itemsQueryKeys.selected}
-              initialPageParam={0}
-              queryFn={({ pageParam, signal }) =>
-                getItems('selected', pageParam, signal)
-              }
-              getNextPageParam={getNextItemsPageParam}
-              getPreviousPageParam={getPreviousItemsPageParam}
+              data={itemsQuery.data}
+              isFetchingNextPage={itemsQuery.isFetchingNextPage}
+              isFetchingPreviousPage={itemsQuery.isFetchingPreviousPage}
+              hasNextPage={itemsQuery.hasNextPage}
+              hasPreviousPage={itemsQuery.hasPreviousPage}
+              fetchNextPage={itemsQuery.fetchNextPage}
+              fetchPreviousPage={itemsQuery.fetchPreviousPage}
               getItems={(page) => page.items}
               getItemKey={(item) => item.id}
               renderItem={(item, index) => (

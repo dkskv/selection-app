@@ -1,22 +1,18 @@
 import { useRef, type Key, type ReactNode } from 'react';
-import {
-  useInfiniteQuery,
-  type QueryFunction,
-  type QueryKey,
-  type GetNextPageParamFunction,
-  type GetPreviousPageParamFunction,
-} from '@tanstack/react-query';
+import type { InfiniteData } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteListScroll } from './useInfiniteListScroll';
 import styles from './InfiniteList.module.css';
 import { ProgressLoader } from '../progress-loader';
 
 export type InfiniteListProps<TPage, TItem, TPageParam> = {
-  queryKey: QueryKey;
-  queryFn: QueryFunction<TPage, QueryKey, TPageParam>;
-  initialPageParam: TPageParam;
-  getNextPageParam: GetNextPageParamFunction<TPageParam, TPage>;
-  getPreviousPageParam: GetPreviousPageParamFunction<TPageParam, TPage>;
+  data: InfiniteData<TPage, TPageParam> | undefined;
+  isFetchingNextPage: boolean;
+  isFetchingPreviousPage: boolean;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+  fetchNextPage: () => Promise<unknown>;
+  fetchPreviousPage: () => Promise<unknown>;
   getItems: (page: TPage) => TItem[];
   getItemKey: (item: TItem) => Key;
   renderItem: (item: TItem, index: number) => ReactNode;
@@ -28,37 +24,19 @@ const ROW_HEIGHT = 40;
 /** Количество дополнительных строк за пределами видимой области. */
 const OVERSCAN = 5;
 
-/** Максимальное количество страниц, хранящихся в кеше списка. */
-const MAX_PAGES = 5;
-
 export function InfiniteList<TPage, TItem, TPageParam>({
-  queryKey,
-  queryFn,
-  initialPageParam,
-  getNextPageParam,
-  getPreviousPageParam,
+  data,
+  isFetchingNextPage,
+  isFetchingPreviousPage,
+  hasNextPage,
+  hasPreviousPage,
+  fetchNextPage,
+  fetchPreviousPage,
   getItems,
   getItemKey,
   renderItem,
 }: InfiniteListProps<TPage, TItem, TPageParam>) {
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const {
-    data,
-    isFetchingNextPage,
-    isFetchingPreviousPage,
-    hasNextPage,
-    hasPreviousPage,
-    fetchNextPage,
-    fetchPreviousPage,
-  } = useInfiniteQuery({
-    queryKey,
-    queryFn,
-    initialPageParam,
-    getNextPageParam,
-    getPreviousPageParam,
-    maxPages: MAX_PAGES,
-  });
 
   const items = data?.pages.flatMap(getItems) ?? [];
 
