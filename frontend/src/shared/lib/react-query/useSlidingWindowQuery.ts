@@ -162,22 +162,24 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
     );
   }, []);
 
+  const clearOtherCaches = useCallback(() => {
+    const activeKey = contextRef.current.queryKey;
+
+    const currentHash = queryClient.getQueryCache().find({
+      queryKey: activeKey,
+      exact: true,
+    })?.queryHash;
+
+    queryClient.removeQueries({
+      predicate: (candidate) =>
+        candidate.queryKey[0] === activeKey[0] &&
+        candidate.queryHash !== currentHash,
+    });
+  }, [queryClient]);
+
   const prepareRefresh = useCallback(
     (invalidateOtherKeys = true) => {
-      const activeKey = contextRef.current.queryKey;
-
-      if (invalidateOtherKeys) {
-        const currentHash = queryClient.getQueryCache().find({
-          queryKey: activeKey,
-          exact: true,
-        })?.queryHash;
-
-        queryClient.removeQueries({
-          predicate: (candidate) =>
-            candidate.queryKey[0] === activeKey[0] &&
-            candidate.queryHash !== currentHash,
-        });
-      }
+      if (invalidateOtherKeys) clearOtherCaches();
 
       const operation = {
         id: ++latestRefreshId.current,
@@ -194,7 +196,7 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
 
       return operation;
     },
-    [invalidateExpansions, queryClient],
+    [clearOtherCaches, invalidateExpansions],
   );
 
   const scheduleRefresh = useCallback(() => {
@@ -540,6 +542,7 @@ export function useSlidingWindowQuery<TPage, TPageParam>({
     isPending: !query.data && state.isRefreshing,
     isFetching: state.isRefreshing || isExpanding,
     scheduleRefresh,
+    clearOtherCaches,
     refresh,
   };
 }

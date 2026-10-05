@@ -74,7 +74,7 @@ export function SelectedList({
     },
   });
 
-  const handleMove = useReorderSelected();
+  const handleMove = useReorderSelected(selectedQueryKey);
 
   const reorderMutation = useMutation({
     mutationFn: ({
@@ -86,6 +86,8 @@ export function SelectedList({
       move: ListMove;
     }) => reorderSelectedItem(itemId, afterId),
     onMutate: ({ move }) => {
+      selectedQuery.clearOtherCaches();
+
       const previousData = queryClient.getQueryData<
         InfiniteData<ItemsPage, number>
       >(selectedQueryKey);
@@ -94,7 +96,6 @@ export function SelectedList({
 
       return { previousData };
     },
-    onSuccess: scheduleSelectedRefresh,
     onError: (error, _variables, context) => {
       messageApi.error(error.message);
 
