@@ -1,6 +1,6 @@
 import { createItem, selectItem, type ItemsPage } from '../../../entities/item';
 import { useRef, useState } from 'react';
-import { Button, Card, Flex, InputNumber, message, Typography } from 'antd';
+import { Button, Card, Flex, InputNumber, message, Spin, Typography } from 'antd';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
 import {
   InfiniteList,
@@ -37,13 +37,19 @@ export function UnselectedList({
   useResetInfiniteListScroll({
     listRef,
     scrollKey: search,
-    isLoading: unselectedQuery.isPlaceholderData || unselectedQuery.isRefreshing,
+    isLoading:
+      unselectedQuery.isPlaceholderData || unselectedQuery.isRefreshing,
   });
 
   const pendingSelectedItemIds = useMutationState<number>({
     filters: { mutationKey: ['select-item'], status: 'pending' },
     select: (mutation) => mutation.state.variables as number,
   });
+
+  const pendingCreateCount = useMutationState({
+    filters: { mutationKey: ['create-item'], status: 'pending' },
+    select: () => true,
+  }).length;
 
   const selectMutation = useMutation({
     mutationKey: ['select-item'],
@@ -57,6 +63,7 @@ export function UnselectedList({
   });
 
   const createMutation = useMutation({
+    mutationKey: ['create-item'],
     mutationFn: createItem,
     onError: (error) => messageApi.error(error.message),
     onSuccess: scheduleUnselectedRefresh,
@@ -83,7 +90,7 @@ export function UnselectedList({
           <div className={controls.control}>
             <SearchInput value={search} onChange={onSearchChange} />
           </div>
-          <Flex gap={8} className={controls.control}>
+          <Flex align="center" gap={8} className={controls.control}>
             <InputNumber
               aria-label="Название элемента"
               className={controls.addInput}
@@ -92,10 +99,14 @@ export function UnselectedList({
               onChange={setNewItemId}
               onPressEnter={addItem}
             />
+            {pendingCreateCount > 0 && (
+              <span role="status" aria-label="Adding items">
+                <Spin size="small" />
+              </span>
+            )}
             <Button
               className={controls.addButton}
-              loading={createMutation.isPending}
-              disabled={newItemId === null || createMutation.isPending}
+              disabled={newItemId === null}
               onClick={addItem}
             >
               Add
