@@ -179,4 +179,42 @@ describe('Репозитории с SQLite in-memory', () => {
       });
     },
   );
+
+  describe.each(['findSelected', 'findUnselected'] as const)(
+    'Фильтрация по префиксу ID: %s',
+    (method) => {
+      const order = method === 'findSelected' ? [12, 123, 2] : [2, 12, 123];
+
+      beforeEach(async () => {
+        for (const id of [12, 123, 2]) {
+          await repository.create(id);
+
+          if (method === 'findSelected') {
+            await selection.select(id);
+          }
+        }
+      });
+
+      it.each([
+        { idPrefixFilter: '1', expected: [12, 123] },
+        { idPrefixFilter: '12', expected: [12, 123] },
+        { idPrefixFilter: '123', expected: [123] },
+        { idPrefixFilter: '9', expected: [] },
+        { idPrefixFilter: '', expected: order },
+      ])(
+        'возвращает элементы для префикса "$idPrefixFilter"',
+        async ({ idPrefixFilter, expected }) => {
+          await expect(repository[method]({ idPrefixFilter })).resolves.toEqual(
+            expected.map((id) => ({ id })),
+          );
+        },
+      );
+
+      it('применяет фильтр до пагинации', async () => {
+        await expect(
+          repository[method]({ idPrefixFilter: '1', limit: 1, offset: 1 }),
+        ).resolves.toEqual([{ id: 123 }]);
+      });
+    },
+  );
 });

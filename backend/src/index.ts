@@ -6,7 +6,7 @@ import { SelectionRepository } from './repositories/SelectionRepository.js';
 import {
   createItemSchema,
   itemParamsSchema,
-  paginationSchema,
+  itemsQuerySchema,
   reorderSchema,
   selectItemSchema,
 } from './schemas.js';
@@ -33,13 +33,13 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.get('/api/items/unselected', async (req, res) => {
-  const pagination = paginationSchema.parse(req.query);
+  const pagination = itemsQuerySchema.parse(req.query);
 
   res.json(await itemsRepository.findUnselected(pagination));
 });
 
 app.get('/api/items/selected', async (req, res) => {
-  const pagination = paginationSchema.parse(req.query);
+  const pagination = itemsQuerySchema.parse(req.query);
 
   res.json(await itemsRepository.findSelected(pagination));
 });

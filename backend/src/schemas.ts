@@ -13,6 +13,10 @@ export const paginationSchema = z.object({
   offset: integerParamSchema.pipe(z.number().nonnegative()).default(0),
 });
 
+export const itemsQuerySchema = paginationSchema.extend({
+  idPrefixFilter: z.string().regex(/^\d*$/).default(''),
+});
+
 export const createItemSchema = z.object({ id: idSchema });
 
 export const selectItemSchema = z.object({ itemId: idSchema });
