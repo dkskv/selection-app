@@ -6,7 +6,7 @@ import { InfiniteList } from '../../../shared/ui/infinite-list';
 import { ListRow } from '../../../shared/ui/list-row';
 import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useMutationState } from '@tanstack/react-query';
 import { ProgressLoader } from '../../../shared/ui/progress-loader';
 import listStyles from './SelectionList.module.css';
 import { useSlidingWindowQuery } from '../../../shared/lib/react-query/useSlidingWindowQuery';
@@ -25,7 +25,13 @@ export function UnselectedList({
   const [newItemId, setNewItemId] = useState<number | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
 
+  const pendingSelectedItemIds = useMutationState<number>({
+    filters: { mutationKey: ['select-item'], status: 'pending' },
+    select: (mutation) => mutation.state.variables as number,
+  });
+
   const selectMutation = useMutation({
+    mutationKey: ['select-item'],
     mutationFn: selectItem,
     onError: (error) => messageApi.error(error.message),
     onSuccess: () => {
@@ -98,14 +104,8 @@ export function UnselectedList({
                   size="small"
                   icon={<PlusOutlined />}
                   aria-label={`Добавить ${item.id}`}
-                  loading={
-                    selectMutation.isPending &&
-                    selectMutation.variables === item.id
-                  }
-                  disabled={
-                    selectMutation.isPending &&
-                    selectMutation.variables === item.id
-                  }
+                  loading={pendingSelectedItemIds.includes(item.id)}
+                  disabled={pendingSelectedItemIds.includes(item.id)}
                   onClick={() => selectMutation.mutate(item.id)}
                 />
               }

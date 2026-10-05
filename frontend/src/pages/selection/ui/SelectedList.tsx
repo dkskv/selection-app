@@ -8,6 +8,7 @@ import { Button, Card, Flex, message, Typography } from 'antd';
 import MinusOutlined from '@ant-design/icons/MinusOutlined';
 import {
   useMutation,
+  useMutationState,
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query';
@@ -52,7 +53,13 @@ export function SelectedList({
 
   const [messageApi, contextHolder] = message.useMessage();
 
+  const pendingDeselectedItemIds = useMutationState<number>({
+    filters: { mutationKey: ['deselect-item'], status: 'pending' },
+    select: (mutation) => mutation.state.variables as number,
+  });
+
   const deselectMutation = useMutation({
+    mutationKey: ['deselect-item'],
     mutationFn: deselectItem,
     onError: (error) => messageApi.error(error.message),
     onSuccess: () => {
@@ -172,14 +179,8 @@ export function SelectedList({
                           size="small"
                           icon={<MinusOutlined />}
                           aria-label={`Удалить ${item.id}`}
-                          loading={
-                            deselectMutation.isPending &&
-                            deselectMutation.variables === item.id
-                          }
-                          disabled={
-                            deselectMutation.isPending &&
-                            deselectMutation.variables === item.id
-                          }
+                          loading={pendingDeselectedItemIds.includes(item.id)}
+                          disabled={pendingDeselectedItemIds.includes(item.id)}
                           onClick={() => deselectMutation.mutate(item.id)}
                         />
                       }
