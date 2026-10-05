@@ -1,14 +1,14 @@
 import { useCallback, useState } from 'react';
 import { Flex, message } from 'antd';
-import { useDebouncedRequest } from '../../../shared/lib/react/useDebouncedRequest';
+import { useDebouncedRequest } from '@/shared/lib/react/useDebouncedRequest';
 import {
   getItems,
   getNextItemsPageParam,
   getPreviousItemsPageParam,
   itemsQueryKeys,
   type ItemsPage,
-} from '../../../entities/item';
-import { useSlidingWindowQuery } from '../../../shared/lib/react-query/useSlidingWindowQuery';
+} from '@/entities/item';
+import { useSlidingWindowQuery } from '@/shared/lib/react-query/useSlidingWindowQuery';
 import { SelectedList } from './SelectedList';
 import { UnselectedList } from './UnselectedList';
 

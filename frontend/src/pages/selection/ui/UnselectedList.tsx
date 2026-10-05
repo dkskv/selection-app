@@ -1,4 +1,4 @@
-import { createItem, selectItem, type ItemsPage } from '../../../entities/item';
+import { createItem, selectItem, type ItemsPage } from '@/entities/item';
 import { useRef, useState } from 'react';
 import { Button, Card, Flex, InputNumber, message, Spin, Typography } from 'antd';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
@@ -6,14 +6,14 @@ import {
   InfiniteList,
   type InfiniteListHandle,
   useResetInfiniteListScroll,
-} from '../../../shared/ui/infinite-list';
-import { ListRow } from '../../../shared/ui/list-row';
+} from '@/shared/ui/infinite-list';
+import { ListRow } from '@/shared/ui/list-row';
 import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
 import { useMutation, useMutationState } from '@tanstack/react-query';
-import { ProgressLoader } from '../../../shared/ui/progress-loader';
+import { ProgressLoader } from '@/shared/ui/progress-loader';
 import listStyles from './SelectionList.module.css';
-import { useSlidingWindowQuery } from '../../../shared/lib/react-query/useSlidingWindowQuery';
+import { useSlidingWindowQuery } from '@/shared/lib/react-query/useSlidingWindowQuery';
 
 type SlidingQuery = ReturnType<typeof useSlidingWindowQuery<ItemsPage, number>>;
 

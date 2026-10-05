@@ -2,7 +2,7 @@ import {
   deselectItem,
   reorderSelectedItem,
   type ItemsPage,
-} from '../../../entities/item';
+} from '@/entities/item';
 import { Button, Card, Flex, message, Typography } from 'antd';
 import MinusOutlined from '@ant-design/icons/MinusOutlined';
 import {
@@ -16,8 +16,8 @@ import {
   InfiniteList,
   type InfiniteListHandle,
   useResetInfiniteListScroll,
-} from '../../../shared/ui/infinite-list';
-import { ListRow } from '../../../shared/ui/list-row';
+} from '@/shared/ui/infinite-list';
+import { ListRow } from '@/shared/ui/list-row';
 import { SearchInput } from './SearchInput';
 import controls from './ListControls.module.css';
 import {
@@ -25,14 +25,14 @@ import {
   SortableItem,
   DragHandle,
   type ListMove,
-} from '../../../shared/ui/list-dnd';
-import { ProgressLoader } from '../../../shared/ui/progress-loader';
-import { getRelativeRect } from '../../../shared/lib/dom';
+} from '@/shared/ui/list-dnd';
+import { ProgressLoader } from '@/shared/ui/progress-loader';
+import { getRelativeRect } from '@/shared/lib/dom';
 import listStyles from './SelectionList.module.css';
 import { DropIndicator } from './DropIndicator';
 import { useReorderSelected } from '../model/useReorderSelected';
 import { getAfterIdFromPages } from '../model/getAfterIdFromPages';
-import { useSlidingWindowQuery } from '../../../shared/lib/react-query/useSlidingWindowQuery';
+import { useSlidingWindowQuery } from '@/shared/lib/react-query/useSlidingWindowQuery';
 
 type SlidingQuery = ReturnType<typeof useSlidingWindowQuery<ItemsPage, number>>;
 

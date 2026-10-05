@@ -3,7 +3,7 @@ import type { InfiniteData } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteListScroll } from './useInfiniteListScroll';
 import styles from './InfiniteList.module.css';
-import { ProgressLoader } from '../progress-loader';
+import { ProgressLoader } from '@/shared/ui/progress-loader';
 
 export type InfiniteListProps<TPage, TItem, TPageParam> = {
   ref?: Ref<InfiniteListHandle>;

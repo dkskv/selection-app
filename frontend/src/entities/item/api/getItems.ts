@@ -1,4 +1,4 @@
-import type { Item, ItemsPage } from '../model/types';
+import type { Item, ItemsPage } from '@/entities/item/model/types';
 
 const PAGE_SIZE = 20;
 

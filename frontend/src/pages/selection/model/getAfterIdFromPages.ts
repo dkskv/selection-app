@@ -1,4 +1,4 @@
-import type { ItemsPage } from '../../../entities/item';
+import type { ItemsPage } from '@/entities/item';
 
 /** Возвращает ID элемента перед целевой позицией, пропуская перемещаемый элемент. */
 export function getAfterIdFromPages(

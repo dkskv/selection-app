@@ -1,4 +1,4 @@
-import { SelectionPage } from '../pages/selection';
+import { SelectionPage } from '@/pages/selection';
 
 export function App() {
   return <SelectionPage />;
