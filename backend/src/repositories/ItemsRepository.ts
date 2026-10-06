@@ -1,4 +1,5 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
+import { DomainError } from '../errors.js';
 
 export type Item = { id: number };
 
@@ -12,6 +13,7 @@ export type ItemsQueryParams = {
 export class ItemsRepository {
   private readonly statements: {
     insert: StatementSync;
+    exists: StatementSync;
     findSelected: StatementSync;
     findUnselected: StatementSync;
   };
@@ -19,6 +21,7 @@ export class ItemsRepository {
   constructor(database: DatabaseSync) {
     this.statements = {
       insert: database.prepare('INSERT INTO items (id) VALUES (?)'),
+      exists: database.prepare('SELECT 1 FROM items WHERE id = ?'),
       findSelected: database.prepare(`
         SELECT items.id FROM items
         INNER JOIN selection ON selection.item_id = items.id
@@ -38,6 +41,10 @@ export class ItemsRepository {
 
   /** Создаёт элемент с указанным ID. */
   async create(id: number): Promise<void> {
+    if (this.statements.exists.get(id)) {
+      throw new DomainError(`An item with ID ${id} already exists`);
+    }
+
     this.statements.insert.run(id);
   }
 

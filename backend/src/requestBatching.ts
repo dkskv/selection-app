@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { DeduplicatedBatcher } from './utils/DeduplicatedBatcher.js';
 import { stableStringify } from './utils/stableStringify.js';
+import { handleRequestError } from './requestErrorHandler.js';
 
 type BatchedResult = { status?: number; body?: unknown };
 
@@ -9,7 +10,16 @@ type BatchedOperation = { key: string; run: () => Promise<BatchedResult> };
 /** Создаёт батчер запросов с указанным окном дедупликации. */
 export const createRequestBatcher = (windowMs: number) =>
   new DeduplicatedBatcher<BatchedOperation, BatchedResult, string>(
-    (operations) => Promise.all(operations.map(({ run }) => run())),
+    (operations) =>
+      Promise.all(
+        operations.map(async ({ run }): Promise<BatchedResult> => {
+          try {
+            return await run();
+          } catch (error) {
+            return handleRequestError(error);
+          }
+        }),
+      ),
     ({ key }) => key,
     windowMs,
   );

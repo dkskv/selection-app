@@ -1,5 +1,6 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import { generateKeyBetween } from 'fractional-indexing';
+import { DomainError } from '../errors.js';
 
 /** Управляет выбором элементов и их порядком. */
 export class SelectionRepository {
@@ -80,11 +81,11 @@ export class SelectionRepository {
   /** Перемещает выбранный элемент после afterId; явный null означает начало. */
   async reorder(itemId: number, afterId: number | null): Promise<void> {
     if (itemId === afterId) {
-      throw new Error('Нельзя переместить элемент после самого себя');
+      throw new DomainError(`Item ${itemId} cannot be moved after itself`);
     }
 
     if (!this.statements.findById.get(itemId)) {
-      throw new Error('Перемещаемый элемент должен быть выбран');
+      throw new DomainError(`Item ${itemId} must be selected before it can be moved`);
     }
 
     let left: string | null = null;
@@ -93,7 +94,7 @@ export class SelectionRepository {
       const after = this.statements.findById.get(afterId);
 
       if (!after) {
-        throw new Error('Элемент afterId должен быть выбран');
+        throw new DomainError(`Item ${afterId} must be selected to move item ${itemId} after it`);
       }
 
       left = String(after.position);
