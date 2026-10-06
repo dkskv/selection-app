@@ -1,9 +1,10 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import { generateKeyBetween } from 'fractional-indexing';
 import { DomainError } from '../errors.js';
+import { BaseRepository } from './BaseRepository.js';
 
 /** Управляет выбором элементов и их порядком. */
-export class SelectionRepository {
+export class SelectionRepository extends BaseRepository {
   private readonly statements: {
     /** Возвращает все записи выбора в порядке позиций. */
     findAll: StatementSync;
@@ -24,6 +25,8 @@ export class SelectionRepository {
   };
 
   constructor(database: DatabaseSync) {
+    super(database);
+
     this.statements = {
       findAll: database.prepare(
         'SELECT item_id, position FROM selection ORDER BY position COLLATE BINARY',
@@ -63,14 +66,16 @@ export class SelectionRepository {
 
   /** Выбирает элемент, добавляя его в конец. */
   async select(itemId: number): Promise<void> {
-    const last = this.statements.findLast.get();
+    this.withTransaction(() => {
+      const last = this.statements.findLast.get();
 
-    const position = generateKeyBetween(
-      last ? String(last.position) : null,
-      null,
-    );
+      const position = generateKeyBetween(
+        last ? String(last.position) : null,
+        null,
+      );
 
-    this.statements.insert.run(itemId, position);
+      this.statements.insert.run(itemId, position);
+    });
   }
 
   /** Снимает выбор элемента. */
@@ -80,34 +85,36 @@ export class SelectionRepository {
 
   /** Перемещает выбранный элемент после afterId; явный null означает начало. */
   async reorder(itemId: number, afterId: number | null): Promise<void> {
-    if (itemId === afterId) {
-      throw new DomainError(`Item ${itemId} cannot be moved after itself`);
-    }
-
-    if (!this.statements.findById.get(itemId)) {
-      throw new DomainError(`Item ${itemId} must be selected before it can be moved`);
-    }
-
-    let left: string | null = null;
-
-    if (afterId !== null) {
-      const after = this.statements.findById.get(afterId);
-
-      if (!after) {
-        throw new DomainError(`Item ${afterId} must be selected to move item ${itemId} after it`);
+    this.withTransaction(() => {
+      if (itemId === afterId) {
+        throw new DomainError(`Item ${itemId} cannot be moved after itself`);
       }
 
-      left = String(after.position);
-    }
+      if (!this.statements.findById.get(itemId)) {
+        throw new DomainError(`Item ${itemId} must be selected before it can be moved`);
+      }
 
-    // Перемещаемый элемент исключается из поиска соседей на новом месте.
-    const next =
-      left === null
-        ? this.statements.findFirst.get(itemId)
-        : this.statements.findNextAfter.get(itemId, left);
+      let left: string | null = null;
 
-    const right = next ? String(next.position) : null;
+      if (afterId !== null) {
+        const after = this.statements.findById.get(afterId);
 
-    this.statements.updatePosition.run(generateKeyBetween(left, right), itemId);
+        if (!after) {
+          throw new DomainError(`Item ${afterId} must be selected to move item ${itemId} after it`);
+        }
+
+        left = String(after.position);
+      }
+
+      // Перемещаемый элемент исключается из поиска соседей на новом месте.
+      const next =
+        left === null
+          ? this.statements.findFirst.get(itemId)
+          : this.statements.findNextAfter.get(itemId, left);
+
+      const right = next ? String(next.position) : null;
+
+      this.statements.updatePosition.run(generateKeyBetween(left, right), itemId);
+    });
   }
 }

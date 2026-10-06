@@ -1,5 +1,6 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import { DomainError } from '../errors.js';
+import { BaseRepository } from './BaseRepository.js';
 
 export type Item = { id: number };
 
@@ -10,7 +11,7 @@ export type ItemsQueryParams = {
 };
 
 /** Хранит элементы и получает списки по состоянию выбора. */
-export class ItemsRepository {
+export class ItemsRepository extends BaseRepository {
   private readonly statements: {
     insert: StatementSync;
     exists: StatementSync;
@@ -19,6 +20,8 @@ export class ItemsRepository {
   };
 
   constructor(database: DatabaseSync) {
+    super(database);
+
     this.statements = {
       insert: database.prepare('INSERT INTO items (id) VALUES (?)'),
       exists: database.prepare('SELECT 1 FROM items WHERE id = ?'),
@@ -41,11 +44,13 @@ export class ItemsRepository {
 
   /** Создаёт элемент с указанным ID. */
   async create(id: number): Promise<void> {
-    if (this.statements.exists.get(id)) {
-      throw new DomainError(`An item with ID ${id} already exists`);
-    }
+    this.withTransaction(() => {
+      if (this.statements.exists.get(id)) {
+        throw new DomainError(`An item with ID ${id} already exists`);
+      }
 
-    this.statements.insert.run(id);
+      this.statements.insert.run(id);
+    });
   }
 
   /** Возвращает выбранные элементы в порядке позиций с limit и offset. */
