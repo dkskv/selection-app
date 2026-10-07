@@ -4,6 +4,8 @@ export async function deselectItem(itemId: number): Promise<void> {
   });
 
   if (!response.ok) {
-    throw new Error('Failed to remove item from selection.');
+    const body: { error: string } = await response.json();
+
+    throw new Error(body.error);
   }
 }

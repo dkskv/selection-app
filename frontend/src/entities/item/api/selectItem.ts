@@ -6,6 +6,8 @@ export async function selectItem(itemId: number): Promise<void> {
   });
 
   if (!response.ok) {
-    throw new Error('Failed to select item.');
+    const body: { error: string } = await response.json();
+
+    throw new Error(body.error);
   }
 }

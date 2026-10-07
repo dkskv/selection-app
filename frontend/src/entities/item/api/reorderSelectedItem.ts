@@ -9,6 +9,8 @@ export async function reorderSelectedItem(
   });
 
   if (!response.ok) {
-    throw new Error('Failed to reorder selected item.');
+    const body: { error: string } = await response.json();
+
+    throw new Error(body.error);
   }
 }

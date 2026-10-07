@@ -18,7 +18,9 @@ export async function getItems(
   );
 
   if (!response.ok) {
-    throw new Error('Failed to load items.');
+    const body: { error: string } = await response.json();
+
+    throw new Error(body.error);
   }
 
   const items: Item[] = await response.json();
