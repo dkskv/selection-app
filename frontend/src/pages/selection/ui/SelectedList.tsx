@@ -58,7 +58,7 @@ export function SelectedList({
   useResetInfiniteListScroll({
     listRef,
     scrollKey: search,
-    isLoading: selectedQuery.isPlaceholderData || selectedQuery.isRefreshing,
+    isLoading: selectedQuery.isLoading || selectedQuery.isRefreshing,
   });
 
   const [dropIndicatorPosition, setDropIndicatorPosition] = useState<{
@@ -97,11 +97,13 @@ export function SelectedList({
       move: ListMove;
     }) => reorderSelectedItem(itemId, afterId),
     onMutate: ({ move }) => {
-      selectedQuery.clearOtherCaches();
+      // TODO: реализовать
+      // selectedQuery.clearOtherCaches();
 
-      const previousData = queryClient.getQueryData<
-        InfiniteData<ItemsPage, number>
-      >(selectedQueryKey);
+      const previousData =
+        queryClient.getQueryData<InfiniteData<ItemsPage, number>>(
+          selectedQueryKey,
+        );
 
       handleMove(move);
 
@@ -117,9 +119,10 @@ export function SelectedList({
   });
 
   const moveSelectedItem = (move: ListMove) => {
-    const data = queryClient.getQueryData<InfiniteData<ItemsPage, number>>(
-      selectedQueryKey,
-    );
+    const data =
+      queryClient.getQueryData<InfiniteData<ItemsPage, number>>(
+        selectedQueryKey,
+      );
 
     const afterId = getAfterIdFromPages(
       data?.pages,
@@ -137,7 +140,7 @@ export function SelectedList({
   return (
     <Card title="Selected" className={listStyles.card}>
       {contextHolder}
-      {selectedQuery.isRefreshing && (
+      {(selectedQuery.isLoading || selectedQuery.isRefreshing) && (
         <div className={listStyles.progress}>
           <ProgressLoader />
         </div>
@@ -184,8 +187,8 @@ export function SelectedList({
               isFetchingPreviousPage={selectedQuery.isFetchingPreviousPage}
               hasNextPage={selectedQuery.hasNextPage}
               hasPreviousPage={selectedQuery.hasPreviousPage}
-              fetchNextPage={selectedQuery.fetchNextPage}
-              fetchPreviousPage={selectedQuery.fetchPreviousPage}
+              fetchNextPage={selectedQuery.loadNextPage}
+              fetchPreviousPage={selectedQuery.loadPreviousPage}
               getItems={(page) => page.items}
               getItemKey={(item) => item.id}
               renderItem={(item, index) => (

@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { createElement, type PropsWithChildren } from 'react';
-import { act, renderHook as renderRealHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import {
   QueryClient,
   QueryClientProvider,
@@ -9,9 +9,9 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSlidingWindowQuery } from './useSlidingWindowQuery';
 
-type Page = { value: number; next?: number; previous?: number };
+type Page = { value: number };
 
-const key = ['sliding-window-test'] as const;
+const key = ['sliding-window-v4-test'] as const;
 let queryClient: QueryClient;
 
 function deferred<T>() {
@@ -27,68 +27,62 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function renderHook(
-  queryFn: (param: number, signal: AbortSignal) => Promise<Page>,
-  maxPages = 3,
-  getKey: () => readonly unknown[] = () => key,
+function renderSlidingHook(
+  queryFn: (pageParam: number, signal: AbortSignal) => Promise<Page>,
+  options: {
+    queryKey?: readonly unknown[];
+    getQueryKey?: () => readonly unknown[];
+    getQueryFn?: () => typeof queryFn;
+    maxPages?: number;
+    onError?: (error: Error) => void;
+    placeholderData?:
+      | InfiniteData<Page, number>
+      | ((previousData: InfiniteData<Page, number> | undefined) =>
+          | InfiniteData<Page, number>
+          | undefined);
+  } = {},
 ) {
-  const rendered = renderRealHook(
+  return renderHook(
     () =>
       useSlidingWindowQuery<Page, number>({
-        queryKey: getKey(),
+        queryKey: options.getQueryKey?.() ?? options.queryKey ?? key,
         initialPageParam: 0,
-        queryFn,
-        getNextPageParam: (page) => page.next,
-        getPreviousPageParam: (page) => page.previous,
-        maxPages,
+        queryFn: options.getQueryFn?.() ?? queryFn,
+        getNextPageParam: (lastPage) => {
+          const lastPageParam = lastPage.value;
+
+          return lastPageParam === undefined ? undefined : lastPageParam + 1;
+        },
+        getPreviousPageParam: (firstPage) => {
+          const firstPageParam = firstPage.value;
+
+          return firstPageParam === undefined ? undefined : firstPageParam - 1;
+        },
+        maxPages: options.maxPages ?? 3,
+        onError: options.onError,
+        placeholderData: options.placeholderData,
       }),
     {
       wrapper: ({ children }: PropsWithChildren) =>
         createElement(QueryClientProvider, { client: queryClient }, children),
     },
   );
+}
 
-  const result = new Proxy({} as typeof rendered.result.current, {
-    get: (_target, property) => {
-      const value =
-        rendered.result.current[
-          property as keyof typeof rendered.result.current
-        ];
+function seedPage(
+  pageParam: number,
+  page: Page,
+  queryKey: readonly unknown[] = key,
+) {
+  queryClient.setQueryData([queryKey, pageParam], page);
+}
 
-      if (typeof value !== 'function') return value;
+async function flushEffects() {
+  await act(async () => {
+    await Promise.resolve();
 
-      return (...args: unknown[]) => {
-        let output: unknown;
-
-        act(() => {
-          output = Reflect.apply(value, undefined, args);
-        });
-
-        return output;
-      };
-    },
+    await Promise.resolve();
   });
-
-  return {
-    result,
-    rerender: () => {
-      rendered.rerender();
-
-      return rendered.result.current;
-    },
-  };
-}
-
-function seed(pages: Page[], pageParams: number[]) {
-  queryClient.setQueryData(key, { pages, pageParams });
-}
-
-function cachedData() {
-  return queryClient.getQueryData<InfiniteData<Page, number>>(key);
-}
-
-function dataAt(queryKey: readonly unknown[]) {
-  return queryClient.getQueryData<InfiniteData<Page, number>>(queryKey);
 }
 
 beforeEach(() => {
@@ -99,858 +93,1264 @@ beforeEach(() => {
 
 afterEach(() => {
   queryClient.clear();
+
+  vi.useRealTimers();
 });
 
-describe('Хук useSlidingWindowQuery', () => {
-  it('загружает данные при первом рендере без кеша', async () => {
-    const request = deferred<Page>();
-    const queryFn = vi.fn(() => request.promise);
-    const { result } = renderHook(queryFn);
+describe('useSlidingWindowQuery', () => {
+  describe('начальная загрузка и смена queryKey', () => {
+    it('повторяет запрос старого ключа с его исходной queryFn после смены ключа', async () => {
+      vi.useFakeTimers();
 
-    expect(queryFn).toHaveBeenCalledTimes(1);
+      queryClient.setDefaultOptions({
+        queries: { retry: 1, retryDelay: 1000, gcTime: Infinity },
+      });
 
-    request.resolve({ value: 42 });
+      const keyA = [...key, 'retry-A'];
+      const keyB = [...key, 'retry-B'];
 
-    await act(async () => {
-      await Promise.resolve();
+      const queryFnA = vi.fn()
+        .mockRejectedValueOnce(new Error('Temporary failure'))
+        .mockResolvedValue({ value: 10 });
 
-      await Promise.resolve();
+      const queryFnB = vi.fn().mockResolvedValue({ value: 20 });
+      let activeKey = keyA;
+      let activeQueryFn = queryFnA;
+
+      const { result, rerender } = renderSlidingHook(queryFnA, {
+        getQueryKey: () => activeKey,
+        getQueryFn: () => activeQueryFn,
+      });
+
+      await flushEffects();
+
+      expect(queryFnA).toHaveBeenCalledTimes(1);
+
+      activeKey = keyB;
+
+      activeQueryFn = queryFnB;
+
+      rerender();
+
+      await flushEffects();
+
+      expect(result.current.data?.pages).toEqual([{ value: 20 }]);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+
+      expect(queryClient.getQueryData([keyA, 0])).toEqual({ value: 10 });
+
+      expect(queryClient.getQueryData([keyB, 0])).toEqual({ value: 20 });
+
+      expect(queryFnA).toHaveBeenCalledTimes(2);
+
+      expect(queryFnB).toHaveBeenCalledTimes(1);
+
+      expect(result.current.data?.pages).toEqual([{ value: 20 }]);
     });
 
-    expect(result.data?.pages).toEqual([{ value: 42 }]);
-  });
+    it('загружает начальную страницу при первом рендере без кеша', async () => {
+      const request = deferred<Page>();
+      const queryFn = vi.fn(() => request.promise);
+      const { result } = renderSlidingHook(queryFn);
 
-  it('повторяет начальную загрузку после пробного cleanup в Strict Mode', async () => {
-    const request = deferred<Page>();
-    const queryFn = vi.fn(() => request.promise);
+      expect(result.current.isLoading).toBe(true);
 
-    const rendered = renderRealHook(
-      () =>
-        useSlidingWindowQuery<Page, number>({
-          queryKey: key,
-          initialPageParam: 0,
-          queryFn,
-          getNextPageParam: (page) => page.next,
-          getPreviousPageParam: (page) => page.previous,
-          maxPages: 3,
-        }),
-      {
-        reactStrictMode: true,
-        wrapper: ({ children }: PropsWithChildren) =>
-          createElement(QueryClientProvider, { client: queryClient }, children),
-      },
-    );
+      expect(queryFn).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      await Promise.resolve();
+      expect(queryFn).toHaveBeenCalledWith(0, expect.any(AbortSignal));
+
+      request.resolve({ value: 42 });
+
+      await flushEffects();
+
+      expect(result.current.data?.pages).toEqual([{ value: 42 }]);
+
+      expect(result.current.data?.pageParams).toEqual([0]);
+
+      expect(result.current.isLoading).toBe(false);
     });
 
-    expect(queryFn).toHaveBeenCalledTimes(2);
+    it('не включает isLoading для начальной страницы из кеша', () => {
+      seedPage(0, { value: 42 });
 
-    request.resolve({ value: 42 });
+      const queryFn = vi.fn(() => Promise.resolve({ value: 99 }));
+      const { result } = renderSlidingHook(queryFn);
 
-    await act(async () => {
-      await Promise.resolve();
+      expect(result.current.isLoading).toBe(false);
 
-      await Promise.resolve();
+      expect(queryFn).not.toHaveBeenCalled();
     });
 
-    expect(rendered.result.current.data?.pages).toEqual([{ value: 42 }]);
-  });
+    it('при смене queryKey начинает с initialPageParam и сохраняет старый кеш', async () => {
+      const keyA = ['sliding-window-v4-test', 'A'] as const;
+      const keyB = ['sliding-window-v4-test', 'B'] as const;
 
-  it('сохраняет кеш при смене queryKey, показывает старые данные и переиспользует кеш при возврате', async () => {
-    const keyA = ['sliding-window-test', 'A'] as const;
-    const keyB = ['sliding-window-test', 'B'] as const;
+      seedPage(0, { value: 10 }, keyA);
 
-    queryClient.setQueryData(keyA, { pages: [{ value: 10 }], pageParams: [0] });
+      seedPage(1, { value: 11 }, keyA);
 
-    let activeKey: readonly unknown[] = keyA;
-    const pendingB = deferred<Page>();
+      let activeKey: readonly unknown[] = keyA;
+      const initialB = deferred<Page>();
 
-    const queryFn = vi.fn(() =>
-      activeKey === keyB ? pendingB.promise : Promise.resolve({ value: 99 }),
-    );
-
-    const rendered = renderRealHook(
-      () =>
-        useSlidingWindowQuery<Page, number>({
-          queryKey: activeKey,
-          initialPageParam: 0,
-          queryFn,
-          getNextPageParam: (page) => page.next,
-          getPreviousPageParam: (page) => page.previous,
-          maxPages: 3,
-        }),
-      {
-        wrapper: ({ children }: PropsWithChildren) =>
-          createElement(QueryClientProvider, { client: queryClient }, children),
-      },
-    );
-
-    activeKey = keyB;
-
-    rendered.rerender();
-
-    expect(rendered.result.current.data?.pages).toEqual([{ value: 10 }]);
-
-    expect(dataAt(keyA)?.pages).toEqual([{ value: 10 }]);
-
-    pendingB.resolve({ value: 20 });
-
-    await act(async () => {
-      await Promise.resolve();
-
-      await Promise.resolve();
-    });
-
-    expect(dataAt(keyB)?.pages).toEqual([{ value: 20 }]);
-
-    activeKey = keyA;
-
-    rendered.rerender();
-
-    expect(rendered.result.current.data?.pages).toEqual([{ value: 10 }]);
-
-    expect(queryFn).toHaveBeenCalledTimes(1);
-  });
-
-  it('сбрасывает окно кешированного контекста к initialPageParam при смене queryKey', async () => {
-    const keyA = ['sliding-window-test', 'A'] as const;
-    const keyB = ['sliding-window-test', 'B'] as const;
-
-    queryClient.setQueryData(keyA, {
-      pages: [{ value: 100 }],
-      pageParams: [0],
-    });
-
-    queryClient.setQueryData(keyB, {
-      pages: [{ value: 0, next: 1 }, { value: 1, next: 2 }, { value: 2 }],
-      pageParams: [0, 1, 2],
-    });
-
-    let activeKey: readonly unknown[] = keyA;
-
-    const queryFn = vi.fn((param: number) =>
-      Promise.resolve({ value: param + 10 }),
-    );
-
-    const rendered = renderRealHook(
-      () =>
-        useSlidingWindowQuery<Page, number>({
-          queryKey: activeKey,
-          initialPageParam: 0,
-          queryFn,
-          getNextPageParam: (page) => page.next,
-          getPreviousPageParam: (page) => page.previous,
-          maxPages: 3,
-        }),
-      {
-        wrapper: ({ children }: PropsWithChildren) =>
-          createElement(QueryClientProvider, { client: queryClient }, children),
-      },
-    );
-
-    activeKey = keyB;
-
-    await act(async () => {
-      rendered.rerender();
-
-      await Promise.resolve();
-    });
-
-    expect(dataAt(keyB)?.pageParams).toEqual([0]);
-
-    expect(dataAt(keyB)?.pages).toEqual([{ value: 0, next: 1 }]);
-
-    expect(rendered.result.current.data?.pageParams).toEqual([0]);
-
-    expect(queryFn).not.toHaveBeenCalled();
-  });
-
-  it('не выполняет expand, пока загружается новый queryKey', async () => {
-    const keyA = ['sliding-window-test', 'A'] as const;
-    const keyB = ['sliding-window-test', 'B'] as const;
-    const pendingInitial = deferred<Page>();
-
-    queryClient.setQueryData(keyA, {
-      pages: [{ value: 0, next: 1 }],
-      pageParams: [0],
-    });
-
-    let activeKey: readonly unknown[] = keyA;
-
-    const queryFn = vi.fn((param: number) =>
-      param === 0
-        ? pendingInitial.promise
-        : Promise.resolve({ value: param + 10 }),
-    );
-
-    const rendered = renderRealHook(
-      () =>
-        useSlidingWindowQuery<Page, number>({
-          queryKey: activeKey,
-          initialPageParam: 0,
-          queryFn,
-          getNextPageParam: (page) => page.next,
-          getPreviousPageParam: (page) => page.previous,
-          maxPages: 3,
-        }),
-      {
-        wrapper: ({ children }: PropsWithChildren) =>
-          createElement(QueryClientProvider, { client: queryClient }, children),
-      },
-    );
-
-    activeKey = keyB;
-
-    await act(async () => {
-      rendered.rerender();
-
-      await Promise.resolve();
-    });
-
-    expect(rendered.result.current.isRefreshing).toBe(true);
-
-    await act(async () => {
-      await rendered.result.current.fetchNextPage();
-    });
-
-    expect(queryFn.mock.calls.map(([param]) => param)).toEqual([0]);
-
-    pendingInitial.resolve({ value: 0, next: 1 });
-
-    await act(async () => {
-      await Promise.resolve();
-
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      await rendered.result.current.fetchNextPage();
-    });
-
-    expect(queryFn.mock.calls.map(([param]) => param)).toEqual([0, 1]);
-  });
-
-  it('refresh удаляет кеш других ключей семейства и не использует его после invalidation', async () => {
-    const keyA = ['sliding-window-test', 'A'] as const;
-    const keyB = ['sliding-window-test', 'B'] as const;
-
-    queryClient.setQueryData(keyA, { pages: [{ value: 10 }], pageParams: [0] });
-
-    queryClient.setQueryData(keyB, { pages: [{ value: -1 }], pageParams: [0] });
-
-    const request = deferred<Page>();
-
-    const rendered = renderRealHook(
-      () =>
-        useSlidingWindowQuery<Page, number>({
-          queryKey: keyB,
-          initialPageParam: 0,
-          queryFn: () => request.promise,
-          getNextPageParam: (page) => page.next,
-          getPreviousPageParam: (page) => page.previous,
-          maxPages: 3,
-        }),
-      {
-        wrapper: ({ children }: PropsWithChildren) =>
-          createElement(QueryClientProvider, { client: queryClient }, children),
-      },
-    );
-
-    let refreshPromise!: Promise<void>;
-
-    act(() => {
-      refreshPromise = rendered.result.current.refresh();
-    });
-
-    expect(dataAt(keyA)).toBeUndefined();
-
-    expect(dataAt(keyB)?.pages).toEqual([{ value: -1 }]);
-
-    request.resolve({ value: 20 });
-
-    await act(async () => {
-      await refreshPromise;
-    });
-
-    expect(dataAt(keyB)?.pages).toEqual([{ value: 20 }]);
-
-    expect(dataAt(keyA)).toBeUndefined();
-  });
-
-  it('игнорирует поздний ответ старого queryKey', async () => {
-    const keyA = ['sliding-window-test', 'A'] as const;
-    const keyB = ['sliding-window-test', 'B'] as const;
-    let activeKey: readonly unknown[] = keyA;
-    const requestA = deferred<Page>();
-    const requestB = deferred<Page>();
-
-    const queryFn = vi.fn(() =>
-      activeKey === keyA ? requestA.promise : requestB.promise,
-    );
-
-    const rendered = renderRealHook(
-      () =>
-        useSlidingWindowQuery<Page, number>({
-          queryKey: activeKey,
-          initialPageParam: 0,
-          queryFn,
-          getNextPageParam: (page) => page.next,
-          getPreviousPageParam: (page) => page.previous,
-          maxPages: 3,
-        }),
-      {
-        wrapper: ({ children }: PropsWithChildren) =>
-          createElement(QueryClientProvider, { client: queryClient }, children),
-      },
-    );
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    activeKey = keyB;
-
-    rendered.rerender();
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    requestA.resolve({ value: -1 });
-
-    await act(async () => {
-      await Promise.resolve();
-
-      await Promise.resolve();
-    });
-
-    expect(dataAt(keyB)).toBeUndefined();
-
-    requestB.resolve({ value: 20 });
-
-    await act(async () => {
-      await Promise.resolve();
-
-      await Promise.resolve();
-    });
-
-    expect(dataAt(keyB)?.pages).toEqual([{ value: 20 }]);
-  });
-
-  it('не запускает повторную загрузку при новом массиве с тем же queryKey', async () => {
-    const request = deferred<Page>();
-    const queryFn = vi.fn(() => request.promise);
-
-    const { rerender } = renderHook(queryFn, 3, () => [
-      'sliding-window-test',
-      'same',
-    ]);
-
-    rerender();
-
-    rerender();
-
-    rerender();
-
-    expect(queryFn).toHaveBeenCalledTimes(1);
-
-    request.resolve({ value: 1 });
-  });
-
-  it('продолжает выполнять expand и refresh в новом queryKey', async () => {
-    const keyA = ['sliding-window-test', 'A'] as const;
-    const keyB = ['sliding-window-test', 'B'] as const;
-
-    queryClient.setQueryData(keyA, { pages: [{ value: 10 }], pageParams: [0] });
-
-    queryClient.setQueryData(keyB, {
-      pages: [{ value: 0, next: 1 }],
-      pageParams: [0],
-    });
-
-    let activeKey: readonly unknown[] = keyA;
-
-    const queryFn = vi.fn((param: number) =>
-      Promise.resolve({ value: param + 20 }),
-    );
-
-    const { result, rerender } = renderHook(queryFn, 3, () => activeKey);
-
-    activeKey = keyB;
-
-    rerender();
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    await result.fetchNextPage();
-
-    expect(dataAt(keyB)?.pageParams).toEqual([0, 1]);
-
-    expect(dataAt(keyB)?.pages.map(({ value }) => value)).toEqual([0, 21]);
-
-    await result.refresh();
-
-    expect(dataAt(keyB)?.pages.map(({ value }) => value)).toEqual([20, 21]);
-
-    expect(dataAt(keyA)).toBeUndefined();
-  });
-
-  it('игнорирует результат обновления, вытесненного более новым обновлением', async () => {
-    seed([{ value: 0, next: 1 }], [0]);
-
-    const oldRequest = deferred<Page>();
-    const newRequest = deferred<Page>();
-    let calls = 0;
-
-    const { result } = renderHook(() =>
-      ++calls === 1 ? oldRequest.promise : newRequest.promise,
-    );
-
-    const oldRefresh = result.refresh();
-    const newRefresh = result.refresh();
-
-    newRequest.resolve({ value: 10 });
-
-    await newRefresh;
-
-    oldRequest.resolve({ value: -1 });
-
-    await oldRefresh;
-
-    expect(cachedData()?.pages).toEqual([{ value: 10 }]);
-  });
-
-  it('планирует обновление без запроса данных и запускает его после подтверждения', async () => {
-    seed([{ value: 0 }], [0]);
-
-    const request = deferred<Page>();
-    const queryFn = vi.fn(() => request.promise);
-    const { result, rerender } = renderHook(queryFn);
-
-    result.scheduleRefresh();
-
-    expect(queryFn).not.toHaveBeenCalled();
-
-    expect(rerender().isRefreshing).toBe(true);
-
-    const refresh = result.refresh();
-
-    expect(queryFn).toHaveBeenCalledTimes(1);
-
-    request.resolve({ value: 5 });
-
-    await refresh;
-
-    expect(rerender().isRefreshing).toBe(false);
-  });
-
-  it('использует последнее расписание и не запускает повторное обновление', async () => {
-    seed([{ value: 0 }], [0]);
-
-    const request = deferred<Page>();
-    const queryFn = vi.fn(() => request.promise);
-    const { result } = renderHook(queryFn);
-
-    result.scheduleRefresh();
-
-    result.scheduleRefresh();
-
-    expect(queryFn).not.toHaveBeenCalled();
-
-    const refresh = result.refresh();
-
-    expect(queryFn).toHaveBeenCalledTimes(1);
-
-    request.resolve({ value: 2 });
-
-    await refresh;
-
-    expect(queryFn).toHaveBeenCalledTimes(1);
-  });
-
-  it('сохраняет состояние запланированного обновления, если запрос не последовал', () => {
-    seed([{ value: 0 }], [0]);
-
-    const queryFn = vi.fn(() => Promise.resolve({ value: 1 }));
-    const { result, rerender } = renderHook(queryFn);
-
-    result.scheduleRefresh();
-
-    expect(queryFn).not.toHaveBeenCalled();
-
-    expect(rerender().isRefreshing).toBe(true);
-  });
-
-  it('сохраняет логическую страницу расширения при обновлении после отмены её запроса', async () => {
-    seed([{ value: 0, next: 1 }], [0]);
-
-    const expandRequest = deferred<Page>();
-    const refreshed: number[] = [];
-    let expandCalled = false;
-
-    const queryFn = (param: number, signal: AbortSignal) => {
-      if (param === 1 && !expandCalled) {
-        expandCalled = true;
-
-        signal.addEventListener('abort', () =>
-          expandRequest.reject(new DOMException('Отменено', 'AbortError')),
-        );
-
-        return expandRequest.promise;
-      }
-
-      refreshed.push(param);
-
-      return Promise.resolve({ value: param });
-    };
-
-    const { result, rerender } = renderHook(queryFn);
-
-    const expand = result.fetchNextPage();
-    const refresh = result.refresh();
-
-    await Promise.all([expand, refresh]);
-
-    rerender();
-
-    expect(refreshed).toEqual([0, 1]);
-
-    expect(cachedData()?.pageParams).toEqual([0, 1]);
-  });
-
-  it.each([true, false])(
-    'позволяет обновлению и последующему расширению независимо фиксировать результат (сначала обновление: %s)',
-    async (refreshFinishesFirst) => {
-      const pageParams = [10, 11, 12, 13, 14];
-
-      seed(
-        pageParams.map((value) => ({
-          value,
-          previous: value - 1,
-          next: value + 1,
-        })),
-        pageParams,
+      const queryFn = vi.fn((pageParam: number) =>
+        activeKey === keyB && pageParam === 0
+          ? initialB.promise
+          : Promise.resolve({ value: pageParam + 20 }),
       );
 
-      const refreshRequests = new Map(
-        pageParams.map((param) => [param, deferred<Page>()]),
+      const rendered = renderSlidingHook(queryFn, {
+        getQueryKey: () => activeKey,
+      });
+
+      expect(rendered.result.current.data?.pageParams).toEqual([0]);
+
+      activeKey = keyB;
+
+      rendered.rerender();
+
+      await flushEffects();
+
+      expect(queryFn).toHaveBeenCalledTimes(1);
+
+      expect(queryFn).toHaveBeenCalledWith(0, expect.any(AbortSignal));
+
+      expect(rendered.result.current.data).toBeUndefined();
+
+      expect(rendered.result.current.isLoading).toBe(true);
+
+      expect(queryClient.getQueryData([keyA, 0])).toEqual({ value: 10 });
+
+      expect(queryClient.getQueryData([keyA, 1])).toEqual({ value: 11 });
+
+      initialB.resolve({ value: 20 });
+
+      await flushEffects();
+
+      expect(rendered.result.current.data?.pageParams).toEqual([0]);
+
+      expect(rendered.result.current.data?.pages).toEqual([{ value: 20 }]);
+
+      expect(rendered.result.current.isLoading).toBe(false);
+
+      activeKey = keyA;
+
+      rendered.rerender();
+
+      await flushEffects();
+
+      expect(rendered.result.current.data?.pages).toEqual([{ value: 10 }]);
+
+      expect(rendered.result.current.isLoading).toBe(false);
+
+      expect(queryFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('передаёт предыдущие данные в placeholderData при смене queryKey', async () => {
+      const keyA = ['sliding-window-v4-test', 'placeholder-A'] as const;
+      const keyB = ['sliding-window-v4-test', 'placeholder-B'] as const;
+
+      seedPage(0, { value: 10 }, keyA);
+
+      let activeKey: readonly unknown[] = keyA;
+      const initialB = deferred<Page>();
+      const queryFn = vi.fn(() => initialB.promise);
+
+      const placeholderData = vi.fn(
+        (previousData: InfiniteData<Page, number> | undefined) => previousData,
       );
 
-      const expandRequest = deferred<Page>();
-      const signals: AbortSignal[] = [];
+      const rendered = renderSlidingHook(queryFn, {
+        getQueryKey: () => activeKey,
+        placeholderData,
+      });
 
-      const { result } = renderHook((param, signal) => {
-        signals.push(signal);
+      expect(rendered.result.current.data?.pages).toEqual([{ value: 10 }]);
 
-        return param === 15
-          ? expandRequest.promise
-          : refreshRequests.get(param)!.promise;
-      }, 6);
+      activeKey = keyB;
 
-      const refresh = result.refresh();
-      const expand = result.fetchNextPage();
+      rendered.rerender();
 
-      expect(signals.every((signal) => !signal.aborted)).toBe(true);
+      await flushEffects();
 
-      const resolveRefresh = () => {
-        pageParams.forEach((param) =>
-          refreshRequests.get(param)!.resolve({
-            value: param * 10,
-            previous: param - 1,
-            next: param + 1,
-          }),
-        );
+      expect(placeholderData).toHaveBeenCalledWith({
+        pages: [{ value: 10 }],
+        pageParams: [0],
+      });
+
+      expect(rendered.result.current.data).toEqual({
+        pages: [{ value: 10 }],
+        pageParams: [0],
+      });
+
+      expect(rendered.result.current.isLoading).toBe(true);
+
+      expect(rendered.result.current.hasNextPage).toBe(false);
+
+      await act(async () => {
+        await rendered.result.current.loadNextPage();
+      });
+
+      expect(queryFn).toHaveBeenCalledTimes(1);
+
+      initialB.resolve({ value: 20 });
+
+      await flushEffects();
+
+      expect(rendered.result.current.data).toEqual({
+        pages: [{ value: 20 }],
+        pageParams: [0],
+      });
+
+      expect(rendered.result.current.isLoading).toBe(false);
+    });
+
+    it('использует статические placeholderData до загрузки нового queryKey', async () => {
+      const keyA = ['sliding-window-v4-test', 'static-placeholder-A'] as const;
+      const keyB = ['sliding-window-v4-test', 'static-placeholder-B'] as const;
+
+      seedPage(0, { value: 10 }, keyA);
+
+      let activeKey: readonly unknown[] = keyA;
+      const initialB = deferred<Page>();
+
+      const placeholderData: InfiniteData<Page, number> = {
+        pages: [{ value: -1 }],
+        pageParams: [-1],
       };
 
-      if (refreshFinishesFirst) {
-        resolveRefresh();
+      const rendered = renderSlidingHook(() => initialB.promise, {
+        getQueryKey: () => activeKey,
+        placeholderData,
+      });
 
-        await refresh;
+      activeKey = keyB;
 
-        expect(cachedData()?.pageParams).toEqual(pageParams);
-      } else {
-        expandRequest.resolve({ value: 150, previous: 14, next: 16 });
+      rendered.rerender();
 
-        await expand;
+      await flushEffects();
 
-        expect(cachedData()?.pageParams).toEqual([...pageParams, 15]);
-      }
+      expect(rendered.result.current.data).toBe(placeholderData);
 
-      if (refreshFinishesFirst) {
-        expandRequest.resolve({ value: 150, previous: 14, next: 16 });
-      } else {
-        resolveRefresh();
-      }
+      initialB.resolve({ value: 20 });
 
-      await Promise.all([refresh, expand]);
+      await flushEffects();
 
-      expect(cachedData()?.pageParams).toEqual([...pageParams, 15]);
+      expect(rendered.result.current.data).toEqual({
+        pages: [{ value: 20 }],
+        pageParams: [0],
+      });
+    });
 
-      expect(cachedData()?.pages.map(({ value }) => value)).toEqual([
-        100, 110, 120, 130, 140, 150,
+    it('при прерывании начальной загрузки refresh переключает isLoading на isRefreshing', async () => {
+      const initialRequest = deferred<Page>();
+      const refreshRequest = deferred<Page>();
+      let requestCount = 0;
+
+      const queryFn = vi.fn(() =>
+        requestCount++ === 0 ? initialRequest.promise : refreshRequest.promise,
+      );
+
+      const { result } = renderSlidingHook(queryFn);
+
+      expect(result.current.isLoading).toBe(true);
+
+      let refreshPromise!: Promise<void>;
+
+      act(() => {
+        refreshPromise = result.current.refresh();
+      });
+
+      await flushEffects();
+
+      expect(queryFn).toHaveBeenCalledTimes(2);
+
+      expect(result.current.isLoading).toBe(false);
+
+      expect(result.current.isRefreshing).toBe(true);
+
+      refreshRequest.resolve({ value: 42 });
+
+      await act(async () => {
+        await refreshPromise;
+      });
+
+      expect(result.current.isLoading).toBe(false);
+
+      expect(result.current.isRefreshing).toBe(false);
+
+      expect(result.current.data?.pages).toEqual([{ value: 42 }]);
+
+      initialRequest.resolve({ value: -1 });
+    });
+
+    it('не показывает поздний ответ предыдущего queryKey в новом окне', async () => {
+      const keyA = ['sliding-window-v4-test', 'late-A'] as const;
+      const keyB = ['sliding-window-v4-test', 'late-B'] as const;
+      const requestA = deferred<Page>();
+      const requestB = deferred<Page>();
+      let activeKey: readonly unknown[] = keyA;
+
+      const queryFn = vi.fn(() =>
+        activeKey === keyA ? requestA.promise : requestB.promise,
+      );
+
+      const rendered = renderSlidingHook(queryFn, {
+        getQueryKey: () => activeKey,
+      });
+
+      await flushEffects();
+
+      activeKey = keyB;
+
+      rendered.rerender();
+
+      await flushEffects();
+
+      requestA.resolve({ value: -1 });
+
+      await flushEffects();
+
+      expect(rendered.result.current.data).toBeUndefined();
+
+      requestB.resolve({ value: 20 });
+
+      await flushEffects();
+
+      expect(rendered.result.current.data?.pages).toEqual([{ value: 20 }]);
+
+      expect(queryClient.getQueryData([keyA, 0])).toEqual({ value: -1 });
+    });
+
+    it('не перезапускает начальную загрузку при новом массиве с тем же queryKey', async () => {
+      const request = deferred<Page>();
+      const queryFn = vi.fn(() => request.promise);
+
+      const rendered = renderSlidingHook(queryFn, {
+        getQueryKey: () => ['sliding-window-v4-test', 'stable-hash'],
+      });
+
+      rendered.rerender();
+
+      rendered.rerender();
+
+      expect(queryFn).toHaveBeenCalledTimes(1);
+
+      request.resolve({ value: 1 });
+
+      await flushEffects();
+
+      expect(rendered.result.current.data?.pages).toEqual([{ value: 1 }]);
+    });
+
+    it('не позволяет активному expand старого queryKey менять новое окно', async () => {
+      const keyA = ['sliding-window-v4-test', 'expand-A'] as const;
+      const keyB = ['sliding-window-v4-test', 'expand-B'] as const;
+
+      seedPage(0, { value: 0 }, keyA);
+
+      const expandRequest = deferred<Page>();
+      const initialB = deferred<Page>();
+      let activeKey: readonly unknown[] = keyA;
+
+      const queryFn = vi.fn((pageParam: number) => {
+        if (activeKey === keyA && pageParam === 1) return expandRequest.promise;
+
+        if (activeKey === keyB) return initialB.promise;
+
+        return Promise.resolve({ value: pageParam });
+      });
+
+      const rendered = renderSlidingHook(queryFn, {
+        getQueryKey: () => activeKey,
+      });
+
+      let expandPromise!: Promise<void>;
+
+      act(() => {
+        expandPromise = rendered.result.current.loadNextPage();
+      });
+
+      activeKey = keyB;
+
+      rendered.rerender();
+
+      await flushEffects();
+
+      expandRequest.resolve({ value: 1 });
+
+      await act(async () => {
+        await expandPromise;
+      });
+
+      expect(rendered.result.current.data).toBeUndefined();
+
+      expect(rendered.result.current.isFetchingNextPage).toBe(false);
+
+      initialB.resolve({ value: 20 });
+
+      await flushEffects();
+
+      expect(rendered.result.current.data?.pages).toEqual([{ value: 20 }]);
+    });
+
+    it('не позволяет активному refresh старого queryKey менять новое окно', async () => {
+      const keyA = ['sliding-window-v4-test', 'refresh-A'] as const;
+      const keyB = ['sliding-window-v4-test', 'refresh-B'] as const;
+
+      seedPage(0, { value: 0 }, keyA);
+
+      const refreshRequest = deferred<Page>();
+      const initialB = deferred<Page>();
+      let activeKey: readonly unknown[] = keyA;
+
+      const queryFn = vi.fn(() =>
+        activeKey === keyA ? refreshRequest.promise : initialB.promise,
+      );
+
+      const rendered = renderSlidingHook(queryFn, {
+        getQueryKey: () => activeKey,
+      });
+
+      let refreshPromise!: Promise<void>;
+
+      act(() => {
+        refreshPromise = rendered.result.current.refresh();
+      });
+
+      await flushEffects();
+
+      activeKey = keyB;
+
+      rendered.rerender();
+
+      await flushEffects();
+
+      refreshRequest.resolve({ value: -1 });
+
+      await act(async () => {
+        await refreshPromise;
+      });
+
+      expect(rendered.result.current.data).toBeUndefined();
+
+      expect(rendered.result.current.isRefreshing).toBe(false);
+
+      initialB.resolve({ value: 20 });
+
+      await flushEffects();
+
+      expect(rendered.result.current.data?.pages).toEqual([{ value: 20 }]);
+    });
+  });
+
+  describe('расширение окна', () => {
+    it('сохранённый loadNextPage использует актуальные страницы и новый ключ', async () => {
+      const keyA = [...key, 'saved-A'];
+      const keyB = [...key, 'saved-B'];
+      let activeKey = keyA;
+      const queryFnA = vi.fn((pageParam: number) => Promise.resolve({ value: pageParam }));
+      const queryFnB = vi.fn((pageParam: number) => Promise.resolve({ value: pageParam }));
+      let activeQueryFn = queryFnA;
+
+      const { result, rerender } = renderSlidingHook(queryFnA, {
+        getQueryKey: () => activeKey,
+        getQueryFn: () => activeQueryFn,
+      });
+
+      await flushEffects();
+
+      const loadNextPage = result.current.loadNextPage;
+
+      await act(async () => { await loadNextPage(); });
+
+      await act(async () => { await loadNextPage(); });
+
+      expect(result.current.data?.pageParams).toEqual([0, 1, 2]);
+
+      activeKey = keyB;
+
+      activeQueryFn = queryFnB;
+
+      rerender();
+
+      await flushEffects();
+
+      await act(async () => { await loadNextPage(); });
+
+      expect(result.current.data?.pageParams).toEqual([0, 1]);
+
+      expect(queryFnA.mock.calls.map(([param]) => param)).toEqual([0, 1, 2]);
+
+      expect(queryFnB.mock.calls.map(([param]) => param)).toEqual([0, 1]);
+
+      expect(queryClient.getQueryData([keyB, 1])).toEqual({ value: 1 });
+    });
+
+    it('сохраняет загруженные страницы при расширении после долгого простоя', async () => {
+      vi.useFakeTimers();
+
+      queryClient.setDefaultOptions({ queries: { retry: false, gcTime: 1000 } });
+
+      const queryFn = vi.fn((pageParam: number) =>
+        Promise.resolve({ value: pageParam }),
+      );
+
+      const { result } = renderSlidingHook(queryFn);
+
+      await flushEffects();
+
+      await act(async () => {
+        await result.current.loadNextPage();
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      });
+
+      await act(async () => {
+        await result.current.loadNextPage();
+      });
+
+      expect(result.current.data).toEqual({
+        pages: [{ value: 0 }, { value: 1 }, { value: 2 }],
+        pageParams: [0, 1, 2],
+      });
+
+      expect(queryFn.mock.calls.map(([param]) => param)).toEqual([0, 1, 2]);
+    });
+
+    it('расширяет окно с обоих краёв и ограничивает его maxPages', async () => {
+      seedPage(0, { value: 0 });
+
+      const queryFn = vi.fn((pageParam: number) =>
+        Promise.resolve({ value: pageParam }),
+      );
+
+      const { result } = renderSlidingHook(queryFn, { maxPages: 2 });
+
+      await act(async () => {
+        await result.current.loadNextPage();
+      });
+
+      expect(result.current.data?.pageParams).toEqual([0, 1]);
+
+      await act(async () => {
+        await result.current.loadNextPage();
+      });
+
+      expect(result.current.data?.pageParams).toEqual([1, 2]);
+
+      await act(async () => {
+        await result.current.loadPreviousPage();
+      });
+
+      expect(result.current.data?.pageParams).toEqual([0, 1]);
+
+      expect(queryFn.mock.calls.map(([pageParam]) => pageParam)).toEqual([
+        1, 2, 0,
       ]);
-    },
-  );
-
-  it('сохраняет состояние загрузки расширения, пока обновление не завершит отменённую операцию', async () => {
-    seed([{ value: 0, next: 1 }], [0]);
-
-    const expandRequest = deferred<Page>();
-    const refreshRequests = [deferred<Page>(), deferred<Page>()];
-    let firstExpand = true;
-    let refreshIndex = 0;
-
-    const { result, rerender } = renderHook((param) => {
-      if (param === 1 && firstExpand) {
-        firstExpand = false;
-
-        return expandRequest.promise;
-      }
-
-      if (param === 0 || param === 1) {
-        return refreshRequests[refreshIndex++].promise;
-      }
-
-      return Promise.resolve({ value: param });
     });
 
-    const expand = result.fetchNextPage();
+    it('позволяет расширяться в обоих направлениях, если в окне есть место', async () => {
+      seedPage(0, { value: 0 });
 
-    rerender();
+      const nextRequest = deferred<Page>();
+      const previousRequest = deferred<Page>();
 
-    expect(rerender().isFetchingNextPage).toBe(true);
+      const queryFn = vi.fn((pageParam: number) => {
+        if (pageParam === 1) return nextRequest.promise;
 
-    const refresh = result.refresh();
+        if (pageParam === -1) return previousRequest.promise;
 
-    expect(rerender().isFetchingNextPage).toBe(true);
+        return Promise.resolve({ value: pageParam });
+      });
 
-    expandRequest.resolve({ value: 1 });
+      const { result } = renderSlidingHook(queryFn, { maxPages: 3 });
 
-    await expand;
+      let nextPromise!: Promise<void>;
+      let previousPromise!: Promise<void>;
 
-    expect(rerender().isFetchingNextPage).toBe(true);
+      act(() => {
+        nextPromise = result.current.loadNextPage();
 
-    refreshRequests[0].resolve({ value: 0, next: 1 });
+        previousPromise = result.current.loadPreviousPage();
+      });
 
-    refreshRequests[1].resolve({ value: 1 });
+      expect(result.current.isFetchingNextPage).toBe(true);
 
-    await refresh;
+      expect(result.current.isFetchingPreviousPage).toBe(true);
 
-    expect(rerender().isFetchingNextPage).toBe(false);
-  });
+      expect(queryFn.mock.calls.map(([pageParam]) => pageParam)).toEqual([
+        1, -1,
+      ]);
 
-  it('обрабатывает расширение после scheduleRefresh так же, как после refresh', async () => {
-    seed([{ value: 0, next: 1 }], [0]);
+      nextRequest.resolve({ value: 1 });
 
-    const expandRequest = deferred<Page>();
-    const refreshRequest = deferred<Page>();
-    const signals: AbortSignal[] = [];
-    const requestedParams: number[] = [];
+      previousRequest.resolve({ value: -1 });
 
-    const { result, rerender } = renderHook((param, signal) => {
-      signals.push(signal);
+      await act(async () => {
+        await Promise.all([nextPromise, previousPromise]);
+      });
 
-      requestedParams.push(param);
+      expect(result.current.data?.pageParams).toEqual([-1, 0, 1]);
 
-      return param === 1 ? expandRequest.promise : refreshRequest.promise;
+      expect(result.current.data?.pages).toEqual([
+        { value: -1 },
+        { value: 0 },
+        { value: 1 },
+      ]);
     });
 
-    result.scheduleRefresh();
+    it('не запрашивает следующую страницу при повторном expand до завершения текущего', async () => {
+      seedPage(0, { value: 0 });
 
-    const expand = result.fetchNextPage();
-    const refresh = result.refresh();
+      const nextRequest = deferred<Page>();
 
-    expect(signals.every((signal) => !signal.aborted)).toBe(true);
+      const queryFn = vi.fn((pageParam: number) =>
+        pageParam === 1
+          ? nextRequest.promise
+          : Promise.resolve({ value: pageParam }),
+      );
 
-    expect(rerender().isRefreshing).toBe(true);
+      const { result } = renderSlidingHook(queryFn);
+      let firstExpand!: Promise<void>;
+      let repeatedExpand!: Promise<void>;
 
-    expect(rerender().isExpanding).toBe(true);
+      act(() => {
+        firstExpand = result.current.loadNextPage();
 
-    expandRequest.resolve({ value: 1 });
+        repeatedExpand = result.current.loadNextPage();
+      });
 
-    await expand;
+      expect(queryFn.mock.calls.map(([pageParam]) => pageParam)).toEqual([1]);
 
-    expect(rerender().isExpanding).toBe(false);
+      nextRequest.resolve({ value: 1 });
 
-    refreshRequest.resolve({ value: 0, next: 1 });
+      await act(async () => {
+        await Promise.all([firstExpand, repeatedExpand]);
+      });
 
-    await refresh;
+      expect(result.current.data?.pageParams).toEqual([0, 1]);
 
-    expect(requestedParams).toEqual([1, 0, 1]);
-
-    expect(cachedData()?.pageParams).toEqual([0, 1]);
-  });
-
-  it('отменяет расширение до запланированного обновления, но сохраняет его состояние загрузки до завершения обновления', async () => {
-    seed([{ value: 0, next: 1 }], [0]);
-
-    const expandRequest = deferred<Page>();
-    const refreshRequests = [deferred<Page>(), deferred<Page>()];
-    let firstExpand = true;
-    let refreshIndex = 0;
-    const signals: AbortSignal[] = [];
-
-    const { result, rerender } = renderHook((param, signal) => {
-      signals.push(signal);
-
-      if (param === 1 && firstExpand) {
-        firstExpand = false;
-
-        return expandRequest.promise;
-      }
-
-      return refreshRequests[refreshIndex++].promise;
+      expect(queryFn.mock.calls.map(([pageParam]) => pageParam)).toEqual([1]);
     });
-
-    const expand = result.fetchNextPage();
-
-    expect(rerender().isExpanding).toBe(true);
-
-    result.scheduleRefresh();
-
-    expect(signals[0].aborted).toBe(true);
-
-    expect(rerender().isRefreshing).toBe(true);
-
-    expect(rerender().isFetchingNextPage).toBe(true);
-
-    const refresh = result.refresh();
-
-    expandRequest.resolve({ value: 99, previous: 0 });
-
-    await expand;
-
-    expect(rerender().isFetchingNextPage).toBe(true);
-
-    expect(cachedData()?.pages).toEqual([{ value: 0, next: 1 }]);
-
-    refreshRequests[0].resolve({ value: 10, next: 1 });
-
-    refreshRequests[1].resolve({ value: 11 });
-
-    await refresh;
-
-    expect(rerender().isFetchingNextPage).toBe(false);
-
-    expect(cachedData()?.pages).toEqual([
-      { value: 10, next: 1 },
-      { value: 11 },
-    ]);
   });
 
-  it('игнорирует повторное расширение в том же направлении', async () => {
-    seed([{ value: 0, next: 1 }], [0]);
+  describe('refresh', () => {
+    it.each([0, 1, 2])(
+      'при ошибке страницы %s отменяет остальные запросы refresh с expand и сохраняет старое окно',
+      async (failedPage) => {
+        seedPage(0, { value: 0 });
 
-    const request = deferred<Page>();
-    const queryFn = vi.fn(() => request.promise);
-    const { result } = renderHook(queryFn);
+        const requests = [deferred<Page>(), deferred<Page>(), deferred<Page>()];
+        const error = new Error('Refresh failed');
+        const onError = vi.fn();
+        const signals = new Map<number, AbortSignal>();
 
-    const first = result.fetchNextPage();
-    const second = result.fetchNextPage();
-
-    expect(queryFn).toHaveBeenCalledTimes(1);
-
-    request.resolve({ value: 1 });
-
-    await Promise.all([first, second]);
-  });
-
-  it('отменяет ожидающее расширение, если расширение в обратном направлении переполняет окно', async () => {
-    seed(
-      [
-        { value: 1, previous: 0, next: 2 },
-        { value: 2, previous: 1, next: 3 },
-        { value: 3, previous: 2, next: 4 },
-      ],
-      [1, 2, 3],
-    );
-
-    const nextRequest = deferred<Page>();
-
-    const queryFn = (param: number, signal: AbortSignal) => {
-      if (param === 4) {
-        signal.addEventListener('abort', () =>
-          nextRequest.reject(new DOMException('Отменено', 'AbortError')),
+        const queryFn = vi.fn<(pageParam: number, signal: AbortSignal) => Promise<Page>>(
+          (pageParam) => Promise.resolve({ value: pageParam }),
         );
 
-        return nextRequest.promise;
+        const { result } = renderSlidingHook(queryFn, { onError });
+
+        await act(async () => {
+          await result.current.loadNextPage();
+        });
+
+        const oldData = result.current.data;
+
+        queryFn.mockImplementation((pageParam, signal) => {
+          signals.set(pageParam, signal);
+
+          return requests[pageParam]!.promise;
+        });
+
+        let refreshPromise!: Promise<void>;
+
+        act(() => { refreshPromise = result.current.refresh(); });
+
+        await flushEffects();
+
+        let expandPromise!: Promise<void>;
+
+        act(() => { expandPromise = result.current.loadNextPage(); });
+
+        await flushEffects();
+
+        await act(async () => {
+          requests[failedPage]!.reject(error);
+
+          await Promise.all([refreshPromise, expandPromise]);
+        });
+
+        for (const pageParam of [0, 1, 2].filter((page) => page !== failedPage)) {
+          expect(signals.get(pageParam)?.aborted).toBe(true);
+
+          expect(queryClient.getQueryState([key, pageParam])?.fetchStatus).toBe('idle');
+        }
+
+        expect(onError).toHaveBeenCalledExactlyOnceWith(error);
+
+        expect(result.current.isRefreshing).toBe(false);
+
+        expect(result.current.isFetchingNextPage).toBe(false);
+
+        expect(result.current.data).toBe(oldData);
+
+        await act(async () => {
+          requests.forEach((request, pageParam) => request.resolve({ value: pageParam + 100 }));
+        });
+
+        expect(result.current.data).toBe(oldData);
+
+        expect(onError).toHaveBeenCalledTimes(1);
+
+        queryFn.mockImplementation((pageParam) => Promise.resolve({ value: pageParam + 200 }));
+
+        await act(async () => { await result.current.refresh(); });
+
+        expect(result.current.data?.pages).toEqual([{ value: 200 }, { value: 201 }, { value: 202 }]);
+      },
+    );
+
+    it('не запускает страницы старого ключа, если ключ сменился во время отмены запросов', async () => {
+      const keyA = [...key, 'cancel-A'];
+      const keyB = [...key, 'cancel-B'];
+
+      seedPage(0, { value: 10 }, keyA);
+
+      let activeKey = keyA;
+      let finishCancellation!: () => void;
+
+      const cancellation = new Promise<void>((resolve) => {
+        finishCancellation = resolve;
+      });
+
+      const cancelQueries = vi.spyOn(queryClient, 'cancelQueries')
+        .mockImplementationOnce(() => cancellation);
+
+      const initialB = deferred<Page>();
+      const queryFn = vi.fn(() => initialB.promise);
+
+      const { result, rerender } = renderSlidingHook(queryFn, {
+        getQueryKey: () => activeKey,
+      });
+
+      let refreshPromise!: Promise<void>;
+
+      try {
+        act(() => {
+          refreshPromise = result.current.refresh();
+        });
+
+        expect(cancelQueries).toHaveBeenCalledWith({ queryKey: [keyA] });
+
+        activeKey = keyB;
+
+        rerender();
+
+        await flushEffects();
+
+        expect(queryFn).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+          finishCancellation();
+        });
+
+        expect(queryFn).toHaveBeenCalledTimes(1);
+
+        expect(result.current.isLoading).toBe(true);
+
+        expect(result.current.isRefreshing).toBe(false);
+
+        expect(queryClient.getQueryState([keyA, 0])?.fetchStatus).toBe('idle');
+
+        initialB.resolve({ value: 20 });
+
+        await flushEffects();
+
+        expect(result.current.data?.pages).toEqual([{ value: 20 }]);
+
+        expect(queryClient.getQueryData([keyA, 0])).toEqual({ value: 10 });
+
+        await refreshPromise;
+      } finally {
+        finishCancellation();
+
+        cancelQueries.mockRestore();
       }
-
-      return Promise.resolve({ value: param, next: 4 });
-    };
-
-    const { result } = renderHook(queryFn);
-
-    const next = result.fetchNextPage();
-    const previous = result.fetchPreviousPage();
-
-    await Promise.all([next, previous]);
-
-    expect(cachedData()?.pageParams).toEqual([1, 2, 3]);
-
-    expect(cachedData()?.pages.map(({ value }) => value)).toEqual([1, 2, 3]);
-  });
-
-  it('позволяет расширениям в противоположных направлениях завершиться, если в окне есть место', async () => {
-    seed([{ value: 0, previous: -1, next: 1 }], [0]);
-
-    const nextRequest = deferred<Page>();
-    const previousRequest = deferred<Page>();
-
-    const { result, rerender } = renderHook((param) => {
-      if (param === 1) return nextRequest.promise;
-
-      if (param === -1) return previousRequest.promise;
-
-      return Promise.resolve({ value: param });
     });
 
-    const next = result.fetchNextPage();
-    const previous = result.fetchPreviousPage();
+    it.each(['refresh', 'scheduleRefresh'] as const)(
+      '%s показывает обновление нового ключа, пока placeholder хранит старые данные',
+      async (method) => {
+        const keyA = [...key, 'A'];
+        const keyB = [...key, 'B'];
 
-    expect(rerender().isFetchingNextPage).toBe(true);
+        seedPage(0, { value: 10 }, keyA);
 
-    expect(rerender().isFetchingPreviousPage).toBe(true);
+        let activeKey = keyA;
+        const initialRequest = deferred<Page>();
+        const refreshRequest = deferred<Page>();
 
-    nextRequest.resolve({ value: 1, previous: 0 });
+        const queryFn = vi.fn()
+          .mockImplementationOnce(() => initialRequest.promise)
+          .mockImplementationOnce(() => refreshRequest.promise);
 
-    previousRequest.resolve({ value: -1, next: 0 });
+        const { result, rerender } = renderSlidingHook(queryFn, {
+          getQueryKey: () => activeKey,
+          placeholderData: (previousData) => previousData,
+        });
 
-    await Promise.all([next, previous]);
+        activeKey = keyB;
 
-    expect(cachedData()?.pageParams).toEqual([-1, 0, 1]);
+        rerender();
 
-    expect(cachedData()?.pages.map(({ value }) => value)).toEqual([-1, 0, 1]);
-  });
+        await flushEffects();
 
-  it('сохраняет расширенное логическое окно при ошибке загрузки страницы', async () => {
-    seed([{ value: 0, next: 1 }], [0]);
+        expect(result.current.isLoading).toBe(true);
 
-    const refreshed: number[] = [];
-    let shouldFailExpand = true;
+        let refreshPromise: Promise<void> | void;
 
-    const { result } = renderHook((param) => {
-      if (param === 1 && shouldFailExpand) {
-        shouldFailExpand = false;
+        act(() => {
+          refreshPromise = result.current[method]();
+        });
 
-        return Promise.reject(new Error('Не удалось загрузить страницу'));
-      }
+        await flushEffects();
 
-      refreshed.push(param);
+        expect(result.current.isLoading).toBe(false);
 
-      return Promise.resolve({ value: param });
+        expect(result.current.isRefreshing).toBe(true);
+
+        expect(result.current.data?.pages).toEqual([{ value: 10 }]);
+
+        expect(queryFn).toHaveBeenCalledTimes(method === 'refresh' ? 2 : 1);
+
+        if (method === 'scheduleRefresh') {
+          act(() => {
+            refreshPromise = result.current.refresh();
+          });
+
+          await flushEffects();
+
+          expect(result.current.isRefreshing).toBe(true);
+        }
+
+        await act(async () => {
+          refreshRequest.resolve({ value: 20 });
+
+          await refreshPromise;
+        });
+
+        expect(result.current.isRefreshing).toBe(false);
+
+        expect(result.current.data?.pages).toEqual([{ value: 20 }]);
+
+        await act(async () => {
+          initialRequest.resolve({ value: -1 });
+        });
+
+        expect(result.current.data?.pages).toEqual([{ value: 20 }]);
+      },
+    );
+
+    it('scheduleRefresh включает состояние обновления без запроса до вызова refresh', async () => {
+      seedPage(0, { value: 0 });
+
+      const request = deferred<Page>();
+      const queryFn = vi.fn(() => request.promise);
+      const { result } = renderSlidingHook(queryFn);
+
+      act(() => {
+        result.current.scheduleRefresh();
+      });
+
+      expect(queryFn).not.toHaveBeenCalled();
+
+      expect(result.current.isRefreshing).toBe(true);
+
+      let refreshPromise!: Promise<void>;
+
+      act(() => {
+        refreshPromise = result.current.refresh();
+      });
+
+      await flushEffects();
+
+      expect(queryFn).toHaveBeenCalledTimes(1);
+
+      request.resolve({ value: 10 });
+
+      await act(async () => {
+        await refreshPromise;
+      });
+
+      expect(result.current.isRefreshing).toBe(false);
+
+      expect(result.current.data?.pages).toEqual([{ value: 10 }]);
     });
 
-    await result.fetchNextPage();
+    it('повторный scheduleRefresh не запускает лишние запросы', async () => {
+      seedPage(0, { value: 0 });
 
-    await result.refresh();
+      const request = deferred<Page>();
+      const queryFn = vi.fn(() => request.promise);
+      const { result } = renderSlidingHook(queryFn);
 
-    expect(cachedData()?.pageParams).toEqual([0, 1]);
+      act(() => {
+        result.current.scheduleRefresh();
 
-    expect(refreshed).toEqual([0, 1]);
+        result.current.scheduleRefresh();
+      });
+
+      expect(queryFn).not.toHaveBeenCalled();
+
+      expect(result.current.isRefreshing).toBe(true);
+
+      let refreshPromise!: Promise<void>;
+
+      act(() => {
+        refreshPromise = result.current.refresh();
+      });
+
+      await flushEffects();
+
+      expect(queryFn).toHaveBeenCalledTimes(1);
+
+      request.resolve({ value: 20 });
+
+      await act(async () => {
+        await refreshPromise;
+      });
+
+      expect(result.current.isRefreshing).toBe(false);
+    });
+
+    it('оставляет состояние запланированного обновления, если refresh не вызван', () => {
+      seedPage(0, { value: 0 });
+
+      const queryFn = vi.fn(() => Promise.resolve({ value: 1 }));
+      const { result } = renderSlidingHook(queryFn);
+
+      act(() => {
+        result.current.scheduleRefresh();
+      });
+
+      expect(queryFn).not.toHaveBeenCalled();
+
+      expect(result.current.isRefreshing).toBe(true);
+    });
+
+    it('оставляет данные видимыми и параллельно перезагружает страницы окна', async () => {
+      seedPage(0, { value: 0 });
+
+      const refreshRequests = [deferred<Page>(), deferred<Page>()];
+      let isRefreshing = false;
+
+      const queryFn = vi.fn((pageParam: number) =>
+        isRefreshing
+          ? refreshRequests[pageParam]!.promise
+          : Promise.resolve({ value: pageParam }),
+      );
+
+      const { result } = renderSlidingHook(queryFn);
+
+      await act(async () => {
+        await result.current.loadNextPage();
+      });
+
+      isRefreshing = true;
+
+      let refreshPromise!: Promise<void>;
+
+      act(() => {
+        refreshPromise = result.current.refresh();
+      });
+
+      await flushEffects();
+
+      expect(queryFn.mock.calls.map(([pageParam]) => pageParam)).toEqual([
+        1, 0, 1,
+      ]);
+
+      expect(result.current.data?.pages).toEqual([{ value: 0 }, { value: 1 }]);
+
+      expect(result.current.isRefreshing).toBe(true);
+
+      refreshRequests[0]!.resolve({ value: 10 });
+
+      refreshRequests[1]!.resolve({ value: 11 });
+
+      await act(async () => {
+        await refreshPromise;
+      });
+
+      expect(result.current.data?.pages).toEqual([
+        { value: 10 },
+        { value: 11 },
+      ]);
+
+      expect(result.current.isRefreshing).toBe(false);
+    });
+
+    it('добавляет expand в активный refresh и ждёт завершения batch', async () => {
+      seedPage(0, { value: 0 });
+
+      const refreshRequest = deferred<Page>();
+      const expandRequest = deferred<Page>();
+      let isRefreshing = false;
+
+      const queryFn = vi.fn((pageParam: number) => {
+        if (!isRefreshing) return Promise.resolve({ value: pageParam });
+
+        return pageParam === 0 ? refreshRequest.promise : expandRequest.promise;
+      });
+
+      const { result } = renderSlidingHook(queryFn);
+      let refreshPromise!: Promise<void>;
+
+      isRefreshing = true;
+
+      act(() => {
+        refreshPromise = result.current.refresh();
+      });
+
+      await flushEffects();
+
+      let expandPromise!: Promise<void>;
+
+      act(() => {
+        expandPromise = result.current.loadNextPage();
+      });
+
+      await flushEffects();
+
+      expect(queryFn.mock.calls.map(([pageParam]) => pageParam)).toEqual([
+        0, 1,
+      ]);
+
+      expect(result.current.isFetchingNextPage).toBe(true);
+
+      expandRequest.resolve({ value: 101 });
+
+      await flushEffects();
+
+      expect(result.current.isFetchingNextPage).toBe(true);
+
+      expect(result.current.data?.pageParams).toEqual([0]);
+
+      refreshRequest.resolve({ value: 100 });
+
+      await act(async () => {
+        await Promise.all([refreshPromise, expandPromise]);
+      });
+
+      expect(result.current.data?.pageParams).toEqual([0, 1]);
+
+      expect(result.current.data?.pages).toEqual([
+        { value: 100 },
+        { value: 101 },
+      ]);
+
+      expect(result.current.isFetchingNextPage).toBe(false);
+
+      expect(result.current.isRefreshing).toBe(false);
+    });
+
+    it('сохраняет состояние expand до завершения refresh, отменившего его запрос', async () => {
+      seedPage(0, { value: 0 });
+
+      const onError = vi.fn();
+      const expandRequest = deferred<Page>();
+      const refreshRequests = [deferred<Page>(), deferred<Page>()];
+      let isFirstExpand = true;
+      let refreshIndex = 0;
+
+      const { result } = renderSlidingHook((pageParam, signal) => {
+        if (pageParam === 1 && isFirstExpand) {
+          isFirstExpand = false;
+
+          signal.addEventListener('abort', () => {
+            expandRequest.reject(new DOMException('Aborted', 'AbortError'));
+          });
+
+          return expandRequest.promise;
+        }
+
+        return refreshRequests[refreshIndex++]!.promise;
+      }, { onError });
+
+      let expandPromise!: Promise<void>;
+
+      act(() => {
+        expandPromise = result.current.loadNextPage();
+      });
+
+      await flushEffects();
+
+      expect(result.current.isFetchingNextPage).toBe(true);
+
+      let refreshPromise!: Promise<void>;
+
+      act(() => {
+        refreshPromise = result.current.refresh();
+      });
+
+      await flushEffects();
+
+      const isExpandStillLoading = result.current.isFetchingNextPage;
+
+      expect(onError).not.toHaveBeenCalled();
+
+      refreshRequests[0]!.resolve({ value: 10 });
+
+      refreshRequests[1]!.resolve({ value: 11 });
+
+      await act(async () => {
+        await Promise.all([expandPromise, refreshPromise]);
+      });
+
+      expect(isExpandStillLoading).toBe(true);
+
+      expect(onError).not.toHaveBeenCalled();
+
+      expect(result.current.isFetchingNextPage).toBe(false);
+
+      expect(result.current.data?.pageParams).toEqual([0, 1]);
+    });
+
+    it('не сбрасывает состояние нового refresh при завершении предыдущего', async () => {
+      seedPage(0, { value: 0 });
+
+      const refreshRequests = [deferred<Page>(), deferred<Page>()];
+      let refreshIndex = 0;
+      const queryFn = vi.fn(() => refreshRequests[refreshIndex++]!.promise);
+      const { result } = renderSlidingHook(queryFn);
+      let firstRefresh!: Promise<void>;
+      let secondRefresh!: Promise<void>;
+
+      act(() => {
+        firstRefresh = result.current.refresh();
+      });
+
+      await flushEffects();
+
+      act(() => {
+        secondRefresh = result.current.refresh();
+      });
+
+      await flushEffects();
+
+      refreshRequests[1]!.resolve({ value: 2 });
+
+      await act(async () => {
+        await secondRefresh;
+      });
+
+      refreshRequests[0]!.resolve({ value: 1 });
+
+      await act(async () => {
+        await firstRefresh;
+      });
+
+      expect(result.current.data?.pages).toEqual([{ value: 2 }]);
+
+      expect(result.current.isRefreshing).toBe(false);
+    });
+  });
+
+  describe('ошибки', () => {
+    it.each(['next', 'previous'] as const)(
+      'сбрасывает индикатор после ошибки %s и повторяет страницу без повторного расширения окна',
+      async (direction) => {
+        seedPage(0, { value: 0 });
+
+        const error = new Error('Page request failed');
+        const firstRequest = deferred<Page>();
+        const retryRequest = deferred<Page>();
+        const onError = vi.fn();
+
+        const queryFn = vi.fn()
+          .mockImplementationOnce(() => firstRequest.promise)
+          .mockImplementationOnce(() => retryRequest.promise);
+
+        const { result } = renderSlidingHook(queryFn, { maxPages: 1, onError });
+
+        const loadPage = () => direction === 'next'
+          ? result.current.loadNextPage()
+          : result.current.loadPreviousPage();
+
+        const isFetching = () => direction === 'next'
+          ? result.current.isFetchingNextPage
+          : result.current.isFetchingPreviousPage;
+
+        const pageParam = direction === 'next' ? 1 : -1;
+        let firstExpand!: Promise<void>;
+
+        act(() => {
+          firstExpand = loadPage();
+        });
+
+        expect(isFetching()).toBe(true);
+
+        await act(async () => {
+          firstRequest.reject(error);
+
+          await firstExpand;
+        });
+
+        expect(isFetching()).toBe(false);
+
+        expect(onError).toHaveBeenCalledExactlyOnceWith(error);
+
+        expect(result.current.data?.pageParams).toEqual([0]);
+
+        let retryExpand!: Promise<void>;
+
+        act(() => {
+          retryExpand = loadPage();
+        });
+
+        expect(isFetching()).toBe(true);
+
+        expect(queryFn.mock.calls.map(([param]) => param)).toEqual([pageParam, pageParam]);
+
+        await act(async () => {
+          await loadPage();
+        });
+
+        expect(queryFn).toHaveBeenCalledTimes(2);
+
+        await act(async () => {
+          retryRequest.resolve({ value: pageParam });
+
+          await retryExpand;
+        });
+
+        expect(isFetching()).toBe(false);
+
+        expect(result.current.data).toEqual({
+          pages: [{ value: pageParam }],
+          pageParams: [pageParam],
+        });
+
+        expect(onError).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('сообщает об ошибке загрузки страницы', async () => {
+      const error = new Error('request failed');
+      const onError = vi.fn();
+      const queryFn = vi.fn(() => Promise.reject(error));
+
+      renderSlidingHook(queryFn, { onError });
+
+      await flushEffects();
+
+      expect(onError).toHaveBeenCalledWith(error);
+    });
   });
 });

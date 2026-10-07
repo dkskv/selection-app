@@ -1,548 +1,343 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
-import {
-  useQuery,
+  hashKey,
+  CancelledError,
   useQueryClient,
   type InfiniteData,
-  type QueryKey,
 } from '@tanstack/react-query';
+import { PromiseBatch } from '../async/promiseBatch';
+import { useLatest } from '../react/useLatest';
+import {
+  extendAtEdge,
+  getQueryPageEntriesByWindow,
+  getWindowEdgePageParams,
+  pageKey,
+  toError,
+  type Direction,
+  type PagesState,
+  type WindowState,
+} from './useSlidingWindowQuery.helpers';
+import type {
+  UseSlidingWindowQueryOptions,
+  UseSlidingWindowQueryResult,
+} from './useSlidingWindowQuery.types';
 
-type PageParamFn<TPage, TPageParam> = (
-  page: TPage,
-  pages: TPage[],
-) => TPageParam | undefined;
-
-type UseSlidingWindowQueryOptions<TPage, TPageParam> = {
-  queryKey: QueryKey;
-  initialPageParam: TPageParam;
-  queryFn: (pageParam: TPageParam, signal: AbortSignal) => Promise<TPage>;
-  getNextPageParam: PageParamFn<TPage, TPageParam>;
-  getPreviousPageParam: PageParamFn<TPage, TPageParam>;
-  maxPages: number;
-  onError?: (error: Error) => void;
-};
-
-type Direction = 'next' | 'previous';
-
-type ExpandOperation = {
-  id: number;
-  revision: number;
-  controller: AbortController;
-  promise: Promise<void>;
-};
-
-type RefreshOperation = {
-  id: number;
-  revision: number;
-};
-
-type State = {
-  isRefreshing: boolean;
-  isChangingKey: boolean;
-  expanding: Record<Direction, boolean>;
-};
-
-function mergePages<TPage, TPageParam>(
-  current: InfiniteData<TPage, TPageParam> | undefined,
-  window: TPageParam[],
-  updatedParams: TPageParam[],
-  updatedPages: TPage[],
-): InfiniteData<TPage, TPageParam> {
-  const pagesByParam = new Map<TPageParam, TPage>();
-
-  current?.pageParams.forEach((param, index) => {
-    if (window.includes(param)) pagesByParam.set(param, current.pages[index]);
-  });
-
-  updatedParams.forEach((param, index) => {
-    if (window.includes(param)) pagesByParam.set(param, updatedPages[index]);
-  });
-
-  const pageParams = window.filter((param) => pagesByParam.has(param));
-
-  return {
-    pageParams,
-    pages: pageParams.map((param) => pagesByParam.get(param)!),
-  };
-}
-
-function getExpandedWindow<TPageParam>(
-  window: TPageParam[],
-  pageParam: TPageParam,
-  direction: Direction,
-  retryingMissingEdge: boolean,
-  maxPages: number,
-): TPageParam[] {
-  if (retryingMissingEdge) return window;
-
-  const expanded =
-    direction === 'next' ? [...window, pageParam] : [pageParam, ...window];
-
-  if (expanded.length > maxPages)
-    expanded.splice(direction === 'next' ? 0 : -1, 1);
-
-  return expanded;
-}
-
-/** Управляет логическим окном отдельно от загруженных страниц и сетевых операций. */
-export function useSlidingWindowQuery<TPage, TPageParam>({
-  queryKey,
-  initialPageParam,
-  queryFn,
-  getNextPageParam,
-  getPreviousPageParam,
-  maxPages,
-  onError,
-}: UseSlidingWindowQueryOptions<TPage, TPageParam>) {
-  const queryClient = useQueryClient();
-  const contextRef = useRef({ queryKey, queryFn });
-
-  useLayoutEffect(() => {
-    contextRef.current = { queryKey, queryFn };
-  }, [queryFn, queryKey]);
-
-  const query = useQuery<InfiniteData<TPage, TPageParam>>({
+/** Загружает независимые страницы через QueryClient и хранит ожидаемое окно отдельно от данных. */
+export function useSlidingWindowQuery<TPage, TPageParam>(
+  props: UseSlidingWindowQueryOptions<TPage, TPageParam>,
+): UseSlidingWindowQueryResult<TPage, TPageParam> {
+  const {
     queryKey,
-    queryFn: async () => {
-      throw new Error('This query is managed by useSlidingWindowQuery.');
-    },
-    enabled: false,
-    placeholderData: (previousData) => previousData,
+    initialPageParam,
+    getNextPageParam,
+    getPreviousPageParam,
+    placeholderData,
+  } = props;
+
+  const queryClient = useQueryClient();
+  const queryHash = hashKey(queryKey);
+
+  /** Желаемое окно для загрузки */
+  const targetWindowRef = useRef<WindowState<TPageParam>>({
+    queryHash,
+    pageParams: [initialPageParam],
   });
 
-  const logicalWindow = useRef<TPageParam[]>(
-    query.data?.pageParams.length
-      ? [...query.data.pageParams]
-      : [initialPageParam],
+  /** Загруженные страницы */
+  const [pagesState, setPagesState] = useState<PagesState<TPage, TPageParam>>(
+    () => ({
+      queryHash,
+      pageEntries: getQueryPageEntriesByWindow(queryClient, queryKey, [
+        initialPageParam,
+      ]),
+    }),
   );
 
-  const revision = useRef(0);
-  const nextOperationId = useRef(0);
-  const latestRefreshId = useRef(0);
-  const scheduledRefresh = useRef<RefreshOperation | null>(null);
-  const refreshController = useRef<AbortController | null>(null);
-  const expansions = useRef<Partial<Record<Direction, ExpandOperation>>>({});
-  const expandEpoch = useRef(0);
+  /** Актуальные значения для обработчиков, сохранённых потребителем. */
+  const latestRef = useLatest({ props, queryHash, pagesState });
 
-  const queryHash = queryClient
-    .getQueryCache()
-    .find({ queryKey, exact: true })?.queryHash;
-
-  const currentKeyHash = useRef(queryHash);
-
-  const emptyLoadKeyHash = useRef<string | undefined>(undefined);
-
-  const [state, setState] = useState<State>({
+  /** Состояние загрузки для конкретного queryKey. */
+  const [requestState, setRequestState] = useState(() => ({
+    queryHash,
+    isLoading: pagesState.pageEntries === undefined,
     isRefreshing: false,
-    isChangingKey: false,
-    expanding: { next: false, previous: false },
-  });
+    next: false,
+    previous: false,
+  }));
 
-  const reportError = useCallback(
-    (caught: unknown) => {
-      if (caught instanceof Error && caught.name === 'AbortError') return;
+  /** Batch запросов refresh, включая присоединившиеся запросы expand */
+  const refreshBatchRef = useRef<PromiseBatch<unknown> | undefined>(undefined);
 
-      onError?.(
-        caught instanceof Error ? caught : new Error('Failed to load pages.'),
-      );
-    },
-    [onError],
-  );
+  /** Обработка ошибки */
+  function handleError(error: unknown): void {
+    latestRef.current.props.onError?.(toError(error));
+  }
 
-  const invalidateExpansions = useCallback(() => {
-    expandEpoch.current += 1;
-
-    Object.values(expansions.current).forEach((operation) =>
-      operation?.controller.abort(),
-    );
-  }, []);
-
-  const clearOtherCaches = useCallback(() => {
-    const activeKey = contextRef.current.queryKey;
-
-    const currentHash = queryClient.getQueryCache().find({
-      queryKey: activeKey,
-      exact: true,
-    })?.queryHash;
-
-    queryClient.removeQueries({
-      predicate: (candidate) =>
-        candidate.queryKey[0] === activeKey[0] &&
-        candidate.queryHash !== currentHash,
+  /** Запросить конкретную страницу по ее параметрам */
+  const queryPage = (
+    pageParam: TPageParam,
+    { queryKey, queryFn }: Pick<UseSlidingWindowQueryOptions<TPage, TPageParam>, 'queryKey' | 'queryFn'>,
+  ) => {
+    // Ключ и функция фиксируются вместе, в том числе для повторных попыток.
+    return queryClient.query({
+      queryKey: [queryKey, pageParam],
+      queryFn: ({ signal }) => queryFn(pageParam, signal),
+      staleTime: 0,
+      // Без observers страницы окна нужно сохранять до явной очистки кеша.
+      gcTime: Infinity,
     });
-  }, [queryClient]);
+  };
 
-  const prepareRefresh = useCallback(
-    (invalidateOtherKeys = true) => {
-      if (invalidateOtherKeys) clearOtherCaches();
+  /** Положить в state страницы, актуальные на момент вызова */
+  function publishPages(
+    currentQueryHash: string,
+    currentQueryKey: typeof queryKey,
+  ): void {
+    if (targetWindowRef.current.queryHash !== currentQueryHash) return;
 
-      const operation = {
-        id: ++latestRefreshId.current,
-        revision: ++revision.current,
-      };
+    setPagesState({
+      queryHash: currentQueryHash,
+      pageEntries: getQueryPageEntriesByWindow(
+        queryClient,
+        currentQueryKey,
+        targetWindowRef.current.pageParams,
+      ),
+    });
+  }
 
-      invalidateExpansions();
-
-      refreshController.current?.abort();
-
-      scheduledRefresh.current = operation;
-
-      setState((current) => ({ ...current, isRefreshing: true }));
-
-      return operation;
-    },
-    [clearOtherCaches, invalidateExpansions],
-  );
-
-  const scheduleRefresh = useCallback(() => {
-    prepareRefresh();
-  }, [prepareRefresh]);
-
-  const refresh = useCallback(async () => {
-    const operation = scheduledRefresh.current ?? prepareRefresh();
-    const activeKey = contextRef.current.queryKey;
-    const activeQueryFn = contextRef.current.queryFn;
-
-    scheduledRefresh.current = null;
-
-    const controller = new AbortController();
-    const pageParams = [...logicalWindow.current];
-
-    refreshController.current = controller;
-
-    try {
-      const pages = await Promise.all(
-        pageParams.map((param) => activeQueryFn(param, controller.signal)),
-      );
-
-      if (controller.signal.aborted || operation.id !== latestRefreshId.current)
-        return;
-
-      const cached =
-        queryClient.getQueryData<InfiniteData<TPage, TPageParam>>(activeKey);
-
-      queryClient.setQueryData(
-        activeKey,
-        mergePages(cached, logicalWindow.current, pageParams, pages),
-      );
-    } catch (error) {
-      if (
-        !controller.signal.aborted &&
-        operation.id === latestRefreshId.current
-      )
-        reportError(error);
-    } finally {
-      if (operation.id === latestRefreshId.current) {
-        refreshController.current = null;
-
-        setState((current) => ({
-          isRefreshing: false,
-          isChangingKey: false,
-          expanding: {
-            next:
-              current.expanding.next &&
-              (expansions.current.next?.revision ?? Infinity) >=
-                operation.revision,
-            previous:
-              current.expanding.previous &&
-              (expansions.current.previous?.revision ?? Infinity) >=
-                operation.revision,
-          },
-        }));
-
-        (['next', 'previous'] as const).forEach((direction) => {
-          const expansion = expansions.current[direction];
-
-          if (expansion && expansion.revision < operation.revision) {
-            delete expansions.current[direction];
-          }
-        });
-      }
-    }
-  }, [prepareRefresh, queryClient, reportError]);
-
-  const expand = useCallback(
-    async (direction: Direction) => {
-      const activeKey = contextRef.current.queryKey;
-      const activeQueryFn = contextRef.current.queryFn;
-
-      if (state.isChangingKey || query.isPlaceholderData) return;
-
-      const active = expansions.current[direction];
-
-      if (active) return active.promise;
-
-      const data =
-        queryClient.getQueryData<InfiniteData<TPage, TPageParam>>(activeKey);
-
-      const params = data?.pageParams ?? [];
-      const pages = data?.pages ?? [];
-
-      const edgeParam =
-        direction === 'next'
-          ? logicalWindow.current.at(-1)
-          : logicalWindow.current[0];
-
-      const edgeIndex = params.findIndex((param) =>
-        Object.is(param, edgeParam),
-      );
-
-      const edgePage =
-        edgeIndex >= 0
-          ? pages[edgeIndex]
-          : direction === 'next'
-            ? pages.at(-1)
-            : pages[0];
-
-      const pageParam =
-        edgeIndex === -1 && edgeParam !== undefined
-          ? edgeParam
-          : edgePage
-            ? direction === 'next'
-              ? getNextPageParam(edgePage, pages)
-              : getPreviousPageParam(edgePage, pages)
-            : undefined;
-
-      if (pageParam === undefined) return;
-
-      const retryingMissingEdge =
-        edgeIndex === -1 && Object.is(edgeParam, pageParam);
-
-      const overflows =
-        !retryingMissingEdge && logicalWindow.current.length >= maxPages;
-
-      if (overflows) {
-        expandEpoch.current += 1;
-
-        Object.values(expansions.current).forEach((operation) =>
-          operation?.controller.abort(),
-        );
-
-        expansions.current = {};
-
-        setState((current) => ({
-          ...current,
-          expanding: { next: false, previous: false },
-        }));
-      }
-
-      logicalWindow.current = getExpandedWindow(
-        logicalWindow.current,
-        pageParam,
-        direction,
-        retryingMissingEdge,
-        maxPages,
-      );
-
-      const epoch = expandEpoch.current;
-
-      const operation = {
-        id: ++nextOperationId.current,
-        revision: revision.current,
-        controller: new AbortController(),
-        promise: Promise.resolve(),
-      };
-
-      setState((current) => ({
-        ...current,
-        expanding: { ...current.expanding, [direction]: true },
-      }));
-
-      operation.promise = (async () => {
-        try {
-          const page = await activeQueryFn(
-            pageParam,
-            operation.controller.signal,
-          );
-
-          if (
-            operation.controller.signal.aborted ||
-            operation.revision !== revision.current ||
-            epoch !== expandEpoch.current
-          )
-            return;
-
-          const cached =
-            queryClient.getQueryData<InfiniteData<TPage, TPageParam>>(
-              activeKey,
-            );
-
-          queryClient.setQueryData(
-            activeKey,
-            mergePages(cached, logicalWindow.current, [pageParam], [page]),
-          );
-        } catch (error) {
-          if (
-            !operation.controller.signal.aborted &&
-            operation.revision === revision.current &&
-            epoch === expandEpoch.current
-          )
-            reportError(error);
-        } finally {
-          if (
-            expansions.current[direction]?.id === operation.id &&
-            operation.revision === revision.current &&
-            epoch === expandEpoch.current
-          ) {
-            delete expansions.current[direction];
-
-            setState((current) => ({
-              ...current,
-              expanding: { ...current.expanding, [direction]: false },
-            }));
-          }
-        }
-      })();
-
-      expansions.current[direction] = operation;
-
-      return operation.promise;
-    },
-    [
-      getNextPageParam,
-      getPreviousPageParam,
-      maxPages,
-      queryClient,
-      reportError,
-      query.isPlaceholderData,
-      state.isChangingKey,
-    ],
-  );
-
+  /** Начальная загрузка и переход к новому queryKey */
   useEffect(() => {
-    const nextHash = queryHash;
+    const { props: currentProps, queryHash: currentQueryHash } = latestRef.current;
+    const queryChanged = targetWindowRef.current.queryHash !== currentQueryHash;
+    const pageParams = [currentProps.initialPageParam];
 
-    if (currentKeyHash.current !== nextHash) {
-      currentKeyHash.current = nextHash;
+    if (queryChanged) {
+      targetWindowRef.current = { queryHash: currentQueryHash, pageParams };
 
-      emptyLoadKeyHash.current = undefined;
+      refreshBatchRef.current = undefined;
+    }
 
-      revision.current += 1;
+    const pageEntries = getQueryPageEntriesByWindow<TPage, TPageParam>(
+      queryClient,
+      currentProps.queryKey,
+      pageParams,
+    );
 
-      latestRefreshId.current += 1;
-
-      refreshController.current?.abort();
-
-      invalidateExpansions();
-
-      expansions.current = {};
-
-      scheduledRefresh.current = null;
-
-      const cached = queryClient.getQueryData<InfiniteData<TPage, TPageParam>>(
-        contextRef.current.queryKey,
-      );
-
-      const initialPageIndex =
-        cached?.pageParams.findIndex((param) =>
-          Object.is(param, initialPageParam),
-        ) ?? -1;
-
-      logicalWindow.current = [initialPageParam];
-
-      if (initialPageIndex >= 0 && cached) {
-        queryClient.setQueryData(contextRef.current.queryKey, {
-          pages: [cached.pages[initialPageIndex]],
-          pageParams: [initialPageParam],
-        });
-      } else if (cached) {
-        queryClient.setQueryData(contextRef.current.queryKey, {
-          pages: [],
-          pageParams: [],
-        });
+    if (queryChanged) {
+      if (pageEntries !== undefined) {
+        setPagesState({ queryHash: currentQueryHash, pageEntries });
       }
 
-      setState({
-        isRefreshing: initialPageIndex < 0,
-        isChangingKey: initialPageIndex < 0,
-        expanding: { next: false, previous: false },
+      setRequestState({
+        queryHash: currentQueryHash,
+        isLoading: pageEntries === undefined,
+        isRefreshing: false,
+        next: false,
+        previous: false,
       });
+    }
 
-      if (initialPageIndex < 0) {
-        emptyLoadKeyHash.current = nextHash;
-
-        queueMicrotask(() => {
-          prepareRefresh(false);
-
-          refresh();
+    if (!pageEntries) {
+      queryPage(currentProps.initialPageParam, currentProps)
+        .then(() => publishPages(currentQueryHash, currentProps.queryKey))
+        .catch(handleError)
+        .finally(() => {
+          if (latestRef.current.queryHash === currentQueryHash) {
+            setRequestState((value) => ({ ...value, isLoading: false }));
+          }
         });
-      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryHash]);
+
+  /** Загрузить дополнительную страницу в указанном направлении */
+  async function expand(direction: Direction): Promise<void> {
+    const {
+      props: currentProps,
+      queryHash: currentQueryHash,
+      pagesState: currentPagesState,
+    } = latestRef.current;
+
+    const currentQueryKey = currentProps.queryKey;
+    const loadedWindowPages = currentPagesState.pageEntries?.map(({ page }) => page);
+
+    if (
+      targetWindowRef.current.queryHash !== currentQueryHash ||
+      currentPagesState.queryHash !== currentQueryHash ||
+      !loadedWindowPages
+    )
+      return;
+
+    const pageParam =
+      direction === 'next'
+        ? currentProps.getNextPageParam(
+            loadedWindowPages.at(-1)!,
+            loadedWindowPages,
+          )
+        : currentProps.getPreviousPageParam(
+            loadedWindowPages[0],
+            loadedWindowPages,
+          );
+
+    if (pageParam === undefined) return;
+
+    const alreadyInWindow = targetWindowRef.current.pageParams.some(
+      (param) => pageKey(param) === pageKey(pageParam),
+    );
+
+    if (alreadyInWindow) {
+      const pageState = queryClient.getQueryState([currentQueryKey, pageParam]);
+
+      // Повторяем только завершившийся с ошибкой запрос, не расширяя окно снова.
+      if (pageState?.status !== 'error' || pageState.fetchStatus !== 'idle') return;
+    } else {
+      targetWindowRef.current = {
+        queryHash: currentQueryHash,
+        pageParams: extendAtEdge(
+          targetWindowRef.current.pageParams,
+          pageParam,
+          direction,
+          currentProps.maxPages,
+        ),
+      };
+    }
+
+    setRequestState((value) => ({ ...value, [direction]: true }));
+
+    const pagePromise = queryPage(pageParam, currentProps);
+
+    // Если уже запущен refresh, присоединяемся к нему (для атомарного обновления state)
+    if (refreshBatchRef.current) {
+      // Публикацией, ошибками и индикаторами общего batch управляет refresh.
+      await refreshBatchRef.current.add(pagePromise).collect().catch(() => {});
 
       return;
     }
 
-    if (
-      !query.data &&
-      !refreshController.current &&
-      emptyLoadKeyHash.current !== nextHash
-    ) {
-      emptyLoadKeyHash.current = nextHash;
+    return pagePromise
+      .then(() => publishPages(currentQueryHash, currentQueryKey))
+      .then(() => {
+        if (latestRef.current.queryHash === currentQueryHash) {
+          setRequestState((value) => ({ ...value, [direction]: false }));
+        }
+      })
+      .catch((error: unknown) => {
+        // При отмене ради refresh индикатор сбросит сам refresh.
+        if (error instanceof CancelledError) return;
 
-      refresh();
-    }
-  }, [
-    initialPageParam,
-    invalidateExpansions,
-    prepareRefresh,
-    query.data,
-    queryClient,
-    queryHash,
-    refresh,
-  ]);
+        if (latestRef.current.queryHash === currentQueryHash) {
+          setRequestState((value) => ({ ...value, [direction]: false }));
+        }
 
-  useEffect(
-    () => () => {
-      revision.current += 1;
+        handleError(error);
+      });
+  }
 
-      latestRefreshId.current += 1;
+  /** Актуализировать страницы активного окна (инвалидация) */
+  async function refresh(): Promise<void> {
+    const { props: currentProps, queryHash: currentQueryHash } = latestRef.current;
+    const currentQueryKey = currentProps.queryKey;
 
-      refreshController.current?.abort();
+    if (targetWindowRef.current.queryHash !== currentQueryHash) return;
 
-      refreshController.current = null;
+    setRequestState((value) => ({ ...value, isLoading: false, isRefreshing: true }));
 
-      scheduledRefresh.current = null;
+    await queryClient.cancelQueries({ queryKey: [currentQueryKey] });
 
-      emptyLoadKeyHash.current = undefined;
+    // За время отмены пользователь мог переключить выборку.
+    if (latestRef.current.queryHash !== currentQueryHash) return;
 
-      Object.values(expansions.current).forEach((operation) =>
-        operation?.controller.abort(),
-      );
-    },
-    [],
+    const batch = new PromiseBatch();
+
+    targetWindowRef.current.pageParams.forEach((pageParam) => {
+      batch.add(queryPage(pageParam, currentProps));
+    });
+
+    refreshBatchRef.current = batch;
+
+    await batch
+      .collect()
+      .then(() => publishPages(currentQueryHash, currentQueryKey))
+      .catch(async (error: unknown) => {
+        if (error instanceof CancelledError) return;
+
+        if (latestRef.current.queryHash === currentQueryHash && refreshBatchRef.current === batch) {
+          await queryClient.cancelQueries({ queryKey: [currentQueryKey] });
+
+          handleError(error);
+        }
+      })
+      .finally(() => {
+        if (refreshBatchRef.current === batch) {
+          refreshBatchRef.current = undefined;
+
+          if (latestRef.current.queryHash === currentQueryHash) {
+            setRequestState((value) => ({
+              ...value,
+              next: false,
+              previous: false,
+              isRefreshing: false,
+            }));
+          }
+        }
+      });
+  }
+
+  /** Переводит хук в состояние обновления без запуска запросов */
+  function scheduleRefresh(): void {
+    if (targetWindowRef.current.queryHash !== latestRef.current.queryHash) return;
+
+    setRequestState((value) => ({ ...value, isLoading: false, isRefreshing: true }));
+  }
+
+  /** Данные на основе pagesState */
+  const stateData = useMemo<InfiniteData<TPage, TPageParam> | undefined>(
+    () =>
+      pagesState.pageEntries
+        ? {
+            pages: pagesState.pageEntries.map(({ page }) => page),
+            pageParams: pagesState.pageEntries.map(
+              ({ pageParam }) => pageParam,
+            ),
+          }
+        : undefined,
+    [pagesState],
   );
 
-  const pages = query.data?.pages ?? [];
+  /** Данные с учетом текущего queryKey */
+  const currentQueryData =
+    pagesState.queryHash === queryHash ? stateData : undefined;
 
-  const hasNextPage =
-    pages.length > 0 && getNextPageParam(pages.at(-1)!, pages) !== undefined;
+  /** Отображаемые данные с учетом placeholderData */
+  const displayData = useMemo<
+    InfiniteData<TPage, TPageParam> | undefined
+  >(() => {
+    if (currentQueryData !== undefined) return currentQueryData;
 
-  const hasPreviousPage =
-    pages.length > 0 && getPreviousPageParam(pages[0], pages) !== undefined;
+    return typeof placeholderData === 'function'
+      ? placeholderData(stateData)
+      : placeholderData;
+  }, [currentQueryData, placeholderData, stateData]);
 
-  const isExpanding = state.expanding.next || state.expanding.previous;
+  const edgeParams = getWindowEdgePageParams(
+    currentQueryData?.pages,
+    getNextPageParam,
+    getPreviousPageParam,
+  );
+
+  const isCurrentQuery = requestState.queryHash === queryHash;
 
   return {
-    ...query,
-    data: query.data,
-    hasNextPage,
-    hasPreviousPage,
-    expand,
-    fetchNextPage: () => expand('next'),
-    fetchPreviousPage: () => expand('previous'),
-    isFetchingNextPage: state.expanding.next,
-    isFetchingPreviousPage: state.expanding.previous,
-    isExpanding,
-    isRefreshing: state.isRefreshing,
-    isLoading: !query.data && state.isRefreshing,
-    isPending: !query.data && state.isRefreshing,
-    isFetching: state.isRefreshing || isExpanding,
-    scheduleRefresh,
-    clearOtherCaches,
+    data: displayData,
+    hasNextPage: edgeParams.next !== undefined,
+    hasPreviousPage: edgeParams.previous !== undefined,
+    loadNextPage: () => expand('next'),
+    loadPreviousPage: () => expand('previous'),
     refresh,
+    scheduleRefresh,
+    isFetchingNextPage: isCurrentQuery && requestState.next,
+    isFetchingPreviousPage: isCurrentQuery && requestState.previous,
+    isRefreshing: isCurrentQuery && requestState.isRefreshing,
+    isLoading: isCurrentQuery && requestState.isLoading,
   };
 }

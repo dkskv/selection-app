@@ -9,10 +9,13 @@ import {
   type ItemsPage,
 } from '@/entities/item';
 import { useSlidingWindowQuery } from '@/shared/lib/react-query/useSlidingWindowQuery';
+import { removeOtherQueryCaches } from '@/shared/lib/react-query/useSlidingWindowQuery.helpers';
 import { SelectedList } from './SelectedList';
 import { UnselectedList } from './UnselectedList';
+import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
 export function SelectionPage() {
+  const queryClient = useQueryClient();
   const [unselectedSearch, setUnselectedSearch] = useState('');
   const [selectedSearch, setSelectedSearch] = useState('');
   const [messageApi, contextHolder] = message.useMessage();
@@ -34,35 +37,56 @@ export function SelectionPage() {
     [messageApi],
   );
 
+  const unselectedQueryKey = [...itemsQueryKeys.unselected, unselectedSearch];
+  const selectedQueryKey = [...itemsQueryKeys.selected, selectedSearch];
+
   // TODO: Перенести вызовы хука в соответствующие компоненты списков.
   const unselectedQuery = useSlidingWindowQuery<ItemsPage, number>({
-    queryKey: [...itemsQueryKeys.unselected, unselectedSearch],
+    queryKey: unselectedQueryKey,
     initialPageParam: 0,
     queryFn: fetchUnselectedPage,
     getNextPageParam: getNextItemsPageParam,
     getPreviousPageParam: getPreviousItemsPageParam,
     maxPages: 5,
     onError: handleRefreshError,
+    placeholderData: keepPreviousData,
   });
 
   const selectedQuery = useSlidingWindowQuery<ItemsPage, number>({
-    queryKey: [...itemsQueryKeys.selected, selectedSearch],
+    queryKey: selectedQueryKey,
     initialPageParam: 0,
     queryFn: fetchSelectedPage,
     getNextPageParam: getNextItemsPageParam,
     getPreviousPageParam: getPreviousItemsPageParam,
     maxPages: 5,
     onError: handleRefreshError,
+    placeholderData: keepPreviousData,
   });
 
   const unselectedRefresh = useDebouncedRequest({
     delay: 300,
-    request: unselectedQuery.refresh,
+    request: () => {
+      removeOtherQueryCaches(
+        queryClient,
+        itemsQueryKeys.unselected,
+        unselectedQueryKey,
+      );
+
+      return unselectedQuery.refresh();
+    },
   });
 
   const selectedRefresh = useDebouncedRequest({
     delay: 300,
-    request: selectedQuery.refresh,
+    request: () => {
+      removeOtherQueryCaches(
+        queryClient,
+        itemsQueryKeys.selected,
+        selectedQueryKey,
+      );
+
+      return selectedQuery.refresh();
+    },
   });
 
   const prepareUnselectedRefresh = unselectedQuery.scheduleRefresh;
@@ -96,7 +120,7 @@ export function SelectionPage() {
         />
         <SelectedList
           selectedQuery={selectedQuery}
-          selectedQueryKey={[...itemsQueryKeys.selected, selectedSearch]}
+          selectedQueryKey={selectedQueryKey}
           search={selectedSearch}
           onSearchChange={setSelectedSearch}
           scheduleUnselectedRefresh={scheduleUnselectedRefresh}

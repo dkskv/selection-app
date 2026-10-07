@@ -1,6 +1,14 @@
 import { createItem, selectItem, type ItemsPage } from '@/entities/item';
 import { useRef, useState } from 'react';
-import { Button, Card, Flex, InputNumber, message, Spin, Typography } from 'antd';
+import {
+  Button,
+  Card,
+  Flex,
+  InputNumber,
+  message,
+  Spin,
+  Typography,
+} from 'antd';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
 import {
   InfiniteList,
@@ -37,8 +45,7 @@ export function UnselectedList({
   useResetInfiniteListScroll({
     listRef,
     scrollKey: search,
-    isLoading:
-      unselectedQuery.isPlaceholderData || unselectedQuery.isRefreshing,
+    isLoading: unselectedQuery.isLoading || unselectedQuery.isRefreshing,
   });
 
   const pendingSelectedItemIds = useMutationState<number>({
@@ -80,7 +87,7 @@ export function UnselectedList({
   return (
     <Card title="Unselected" className={listStyles.card}>
       {contextHolder}
-      {unselectedQuery.isRefreshing && (
+      {(unselectedQuery.isLoading || unselectedQuery.isRefreshing) && (
         <div className={listStyles.progress}>
           <ProgressLoader />
         </div>
@@ -120,8 +127,8 @@ export function UnselectedList({
           isFetchingPreviousPage={unselectedQuery.isFetchingPreviousPage}
           hasNextPage={unselectedQuery.hasNextPage}
           hasPreviousPage={unselectedQuery.hasPreviousPage}
-          fetchNextPage={unselectedQuery.fetchNextPage}
-          fetchPreviousPage={unselectedQuery.fetchPreviousPage}
+          fetchNextPage={unselectedQuery.loadNextPage}
+          fetchPreviousPage={unselectedQuery.loadPreviousPage}
           getItems={(page) => page.items}
           getItemKey={(item) => item.id}
           renderItem={(item) => (

@@ -1,4 +1,8 @@
-import { useQueryClient, type InfiniteData, type QueryKey } from '@tanstack/react-query';
+import {
+  useQueryClient,
+  type InfiniteData,
+  type QueryKey,
+} from '@tanstack/react-query';
 import type { ItemsPage } from '@/entities/item';
 import { moveItemAcrossPages } from '@/shared/lib/array';
 import type { ListMove } from '@/shared/ui/list-dnd';
