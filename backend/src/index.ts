@@ -1,5 +1,6 @@
 import express from 'express';
 import { fileURLToPath } from 'node:url';
+import { config } from './config.js';
 import { createDatabase } from './database.js';
 import { ItemsRepository } from './repositories/ItemsRepository.js';
 import { SelectionRepository } from './repositories/SelectionRepository.js';
@@ -24,7 +25,7 @@ const { itemsRepository, selectionRepository, requestBatcher, createItemBatcher 
     const requestBatcher = createRequestBatcher(1000);
     const createItemBatcher = createRequestBatcher(10_000);
 
-    for (let id = 1; id <= 1000; id++) {
+    for (let id = 1; id <= config.INITIAL_ITEMS_COUNT; id++) {
       await itemsRepository.create(id);
     }
 
