@@ -13,9 +13,10 @@ export function ItemRow({
   handle?: ReactNode;
 }) {
   return (
-    <ListRow action={action}>
+    <ListRow>
       <Flex align="center" gap="small" style={{ minWidth: 0 }}>
         {handle}
+        {action}
         <Typography.Text ellipsis style={{ minWidth: 0 }}>
           {item.id}
         </Typography.Text>
