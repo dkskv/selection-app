@@ -45,7 +45,6 @@ export function SelectedList({
       <ReorderItems onMove={moveSelectedItem}>
         <ItemList
           query={query}
-          search={search}
           renderItem={(item, index) => (
             <SortableItem id={item.id} index={index}>
               {(handleRef) => (

@@ -39,7 +39,6 @@ export function UnselectedList({
       {contextHolder}
       <ItemList
         query={query}
-        search={search}
         renderItem={(item) => (
           <ItemRow
             item={item}

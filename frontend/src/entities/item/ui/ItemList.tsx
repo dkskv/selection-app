@@ -6,23 +6,23 @@ import {
 } from '@/shared/ui/infinite-list';
 import type { ItemsQuery } from '../model/useItemsQuery';
 import type { Item } from '../model/types';
+import { useDataVersionForScroll } from './useDataVersionForScroll';
 
 export function ItemList({
   query,
-  search,
   renderItem,
 }: {
   query: ItemsQuery;
-  search: string;
   renderItem: (item: Item, index: number) => ReactNode;
 }) {
   const listRef = useRef<InfiniteListHandle>(null);
 
-  useResetInfiniteListScroll({
-    listRef,
-    scrollKey: search,
-    isLoading: query.isLoading || query.isRefreshing,
-  });
+  const dataVersionForScroll = useDataVersionForScroll(
+    query.queryKey,
+    query.data,
+  );
+
+  useResetInfiniteListScroll(listRef, dataVersionForScroll);
 
   return (
     <InfiniteList

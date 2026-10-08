@@ -1,29 +1,19 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useLayoutEffect, useRef, type RefObject } from 'react';
 import type { InfiniteListHandle } from './InfiniteList';
 
-export function useResetInfiniteListScroll({
-  listRef,
-  scrollKey,
-  isLoading,
-}: {
-  listRef: RefObject<InfiniteListHandle | null>;
-  scrollKey: unknown;
-  isLoading: boolean;
-}) {
-  const previousKey = useRef(scrollKey);
-  const resetPending = useRef(false);
+export function useResetInfiniteListScroll(
+  listRef: RefObject<InfiniteListHandle | null>,
+  dataVersion: string | number,
+) {
+  const previousDataVersion = useRef(dataVersion);
 
-  useEffect(() => {
-    if (!Object.is(previousKey.current, scrollKey)) {
-      previousKey.current = scrollKey;
+  useLayoutEffect(() => {
+    const hasChanged = !Object.is(previousDataVersion.current, dataVersion);
 
-      resetPending.current = true;
-    }
+    previousDataVersion.current = dataVersion;
 
-    if (resetPending.current && !isLoading) {
+    if (hasChanged) {
       listRef.current?.resetScroll();
-
-      resetPending.current = false;
     }
-  }, [isLoading, listRef, scrollKey]);
+  }, [dataVersion, listRef]);
 }
