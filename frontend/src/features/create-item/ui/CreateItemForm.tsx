@@ -18,7 +18,11 @@ export function CreateItemForm({ onSuccess }: { onSuccess: () => void }) {
     mutationKey: ['create-item'],
     mutationFn: createItem,
     onError: (error) => messageApi.error({ message: error.message }),
-    onSuccess,
+    onSuccess: (_data, id) => {
+      messageApi.success({ message: `Item with ID ${id} was added successfully` });
+
+      onSuccess();
+    },
   });
 
   const addItem = () => {
