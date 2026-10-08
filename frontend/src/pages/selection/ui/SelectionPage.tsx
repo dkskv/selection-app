@@ -1,17 +1,18 @@
 import { useCallback, useState } from 'react';
-import { Flex, message } from 'antd';
+import { Flex } from 'antd';
 import { useItemsQuery } from '@/entities/item';
+import { useNotification } from '@/shared/lib/antd/useNotification';
 import { SelectedList } from './selected-list/SelectedList';
 import { UnselectedList } from './unselected-list/UnselectedList';
 
 export function SelectionPage() {
   const [unselectedSearch, setUnselectedSearch] = useState('');
   const [selectedSearch, setSelectedSearch] = useState('');
-  const [messageApi, contextHolder] = message.useMessage();
+  const [messageApi, contextHolder] = useNotification();
 
   const onError = useCallback(
     (error: Error) => {
-      messageApi.error(error.message);
+      messageApi.error({ message: error.message });
     },
     [messageApi],
   );

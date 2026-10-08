@@ -1,4 +1,4 @@
-import { Button, message } from 'antd';
+import { Button } from 'antd';
 import MinusOutlined from '@ant-design/icons/MinusOutlined';
 import { ItemList, ItemRow, type ItemsQuery } from '@/entities/item';
 import { useToggleItemSelection } from '@/features/toggle-item-selection';
@@ -7,6 +7,7 @@ import {
   useReorderItems,
 } from '@/features/reorder-selected-items';
 import { SortableItem, DragHandle } from '@/shared/ui/list-dnd';
+import { useNotification } from '@/shared/lib/antd/useNotification';
 import { ListPanel } from '../list-panel/ListPanel';
 
 export function SelectedList({
@@ -20,10 +21,10 @@ export function SelectedList({
   onSearchChange: (value: string) => void;
   onSelectionChange: () => void;
 }) {
-  const [messageApi, contextHolder] = message.useMessage();
+  const [messageApi, contextHolder] = useNotification();
 
   const onError = (error: Error) => {
-    messageApi.error(error.message);
+    messageApi.error({ message: error.message });
   };
 
   const { toggle, pendingItemIds } = useToggleItemSelection({

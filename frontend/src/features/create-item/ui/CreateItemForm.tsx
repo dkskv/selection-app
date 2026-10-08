@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Button, Flex, InputNumber, message, Spin } from 'antd';
+import { Button, Flex, InputNumber, Spin } from 'antd';
 import { useMutation, useMutationState } from '@tanstack/react-query';
 import { createItem } from '../api/createItem';
+import { useNotification } from '@/shared/lib/antd/useNotification';
 import controls from './CreateItemForm.module.css';
 
 export function CreateItemForm({ onSuccess }: { onSuccess: () => void }) {
   const [newItemId, setNewItemId] = useState<number | null>(null);
-  const [messageApi, contextHolder] = message.useMessage();
+  const [messageApi, contextHolder] = useNotification();
 
   const pendingCreateCount = useMutationState({
     filters: { mutationKey: ['create-item'], status: 'pending' },
@@ -16,7 +17,7 @@ export function CreateItemForm({ onSuccess }: { onSuccess: () => void }) {
   const createMutation = useMutation({
     mutationKey: ['create-item'],
     mutationFn: createItem,
-    onError: (error) => messageApi.error(error.message),
+    onError: (error) => messageApi.error({ message: error.message }),
     onSuccess,
   });
 

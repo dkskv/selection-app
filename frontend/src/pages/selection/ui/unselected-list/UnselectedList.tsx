@@ -1,8 +1,9 @@
-import { Button, message } from 'antd';
+import { Button } from 'antd';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
 import { ItemList, ItemRow, type ItemsQuery } from '@/entities/item';
 import { useToggleItemSelection } from '@/features/toggle-item-selection';
 import { CreateItemForm } from '@/features/create-item';
+import { useNotification } from '@/shared/lib/antd/useNotification';
 import { ListPanel } from '../list-panel/ListPanel';
 
 export function UnselectedList({
@@ -16,10 +17,10 @@ export function UnselectedList({
   onSearchChange: (value: string) => void;
   onSelectionChange: () => void;
 }) {
-  const [messageApi, contextHolder] = message.useMessage();
+  const [messageApi, contextHolder] = useNotification();
 
   const onError = (error: Error) => {
-    messageApi.error(error.message);
+    messageApi.error({ message: error.message });
   };
 
   const { toggle, pendingItemIds } = useToggleItemSelection({
