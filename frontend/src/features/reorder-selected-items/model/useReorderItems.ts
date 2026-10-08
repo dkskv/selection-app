@@ -3,9 +3,12 @@ import {
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query';
-import { type ItemsPage, type ItemsQuery } from '@/entities/item';
+import { itemsQueryKeys, type ItemsPage, type ItemsQuery } from '@/entities/item';
 import type { ListMove } from '@/shared/ui/list-dnd';
-import { getQueryPageEntriesByWindow } from '@/shared/lib/react-query/useSlidingWindowQuery.helpers';
+import {
+  getQueryPageEntriesByWindow,
+  removeOtherQueryCaches,
+} from '@/shared/lib/react-query/useSlidingWindowQuery.helpers';
 import { reorderSelectedItem } from '../api/reorderSelectedItem';
 import { useReorderSelected } from './useReorderSelected';
 import { getAfterIdFromPages } from './getAfterIdFromPages';
@@ -29,6 +32,8 @@ export function useReorderItems(
     }) => reorderSelectedItem(itemId, afterId),
     onMutate: async ({ move, pageParams }) => {
       const queryKey = query.queryKey;
+
+      removeOtherQueryCaches(queryClient, itemsQueryKeys.selected, queryKey);
 
       // Ответ текущей загрузки не должен затереть оптимистическую перестановку.
       await Promise.all(
