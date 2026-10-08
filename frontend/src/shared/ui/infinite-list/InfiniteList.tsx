@@ -6,7 +6,7 @@ import {
   type Ref,
 } from 'react';
 import type { InfiniteData } from '@tanstack/react-query';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useAnchoredVirtualizer } from './useAnchoredVirtualizer';
 import { Empty } from 'antd';
 import { useInfiniteListScroll } from './useInfiniteListScroll';
 import styles from './InfiniteList.module.css';
@@ -14,6 +14,8 @@ import { ProgressLoader } from '@/shared/ui/progress-loader';
 
 export type InfiniteListProps<TPage, TItem, TPageParam> = {
   ref?: Ref<InfiniteListHandle>;
+  rowHeight?: number;
+  overscan?: number;
   data: InfiniteData<TPage, TPageParam> | undefined;
   isFetchingNextPage: boolean;
   isFetchingPreviousPage: boolean;
@@ -30,14 +32,16 @@ export type InfiniteListHandle = {
   resetScroll: () => void;
 };
 
-/** Фиксированная высота строки в пикселях для расчёта виртуализации. */
+/** Фиксированная высота строки по умолчанию в пикселях. */
 const ROW_HEIGHT = 40;
 
-/** Количество дополнительных строк за пределами видимой области. */
-const OVERSCAN = 5;
+/** Количество дополнительных строк за пределами видимой области по умолчанию. */
+const OVERSCAN = 0;
 
 export function InfiniteList<TPage, TItem, TPageParam>({
   ref,
+  rowHeight = ROW_HEIGHT,
+  overscan = OVERSCAN,
   data,
   isFetchingNextPage,
   isFetchingPreviousPage,
@@ -50,24 +54,17 @@ export function InfiniteList<TPage, TItem, TPageParam>({
   renderItem,
 }: InfiniteListProps<TPage, TItem, TPageParam>) {
   const scrollRef = useRef<HTMLDivElement>(null);
-
   const items = data?.pages.flatMap(getItems) ?? [];
 
-  const virtualizer = useVirtualizer({
-    count: items.length,
-    getItemKey: (index) => `item:${getItemKey(items[index]!)}`,
+  const { virtualizer, resetScroll } = useAnchoredVirtualizer({
+    items,
+    getItemKey,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
-    overscan: OVERSCAN,
-    // Сохраняет видимую строку при добавлении страницы сверху и вытеснении страниц с края.
-    anchorTo: 'end',
+    rowHeight,
+    overscan,
   });
 
-  useImperativeHandle(
-    ref,
-    () => ({ resetScroll: () => virtualizer.scrollToOffset(0) }),
-    [virtualizer],
-  );
+  useImperativeHandle(ref, () => ({ resetScroll }), [resetScroll]);
 
   const virtualRows = virtualizer.getVirtualItems();
 
