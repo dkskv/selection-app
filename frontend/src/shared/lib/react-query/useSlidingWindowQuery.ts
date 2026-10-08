@@ -90,6 +90,8 @@ export function useSlidingWindowQuery<TPage, TPageParam>(
 
   /** Обработка ошибки */
   function handleError(error: unknown): void {
+    if (error instanceof CancelledError) return;
+
     latestRef.current.props.onError?.(toError(error));
   }
 
