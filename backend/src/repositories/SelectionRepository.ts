@@ -67,6 +67,10 @@ export class SelectionRepository extends BaseRepository {
   /** Выбирает элемент, добавляя его в конец. */
   async select(itemId: number): Promise<void> {
     this.withTransaction(() => {
+      if (this.statements.findById.get(itemId)) {
+        throw new DomainError(`An item with ID ${itemId} is already selected`);
+      }
+
       const last = this.statements.findLast.get();
 
       const position = generateKeyBetween(
@@ -91,7 +95,9 @@ export class SelectionRepository extends BaseRepository {
       }
 
       if (!this.statements.findById.get(itemId)) {
-        throw new DomainError(`Item ${itemId} must be selected before it can be moved`);
+        throw new DomainError(
+          `Item ${itemId} must be selected before it can be moved`,
+        );
       }
 
       let left: string | null = null;
@@ -100,7 +106,9 @@ export class SelectionRepository extends BaseRepository {
         const after = this.statements.findById.get(afterId);
 
         if (!after) {
-          throw new DomainError(`Item ${afterId} must be selected to move item ${itemId} after it`);
+          throw new DomainError(
+            `Item ${afterId} must be selected to move item ${itemId} after it`,
+          );
         }
 
         left = String(after.position);
@@ -114,7 +122,10 @@ export class SelectionRepository extends BaseRepository {
 
       const right = next ? String(next.position) : null;
 
-      this.statements.updatePosition.run(generateKeyBetween(left, right), itemId);
+      this.statements.updatePosition.run(
+        generateKeyBetween(left, right),
+        itemId,
+      );
     });
   }
 }

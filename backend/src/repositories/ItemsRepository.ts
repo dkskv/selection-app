@@ -46,7 +46,7 @@ export class ItemsRepository extends BaseRepository {
   async create(id: number): Promise<void> {
     this.withTransaction(() => {
       if (this.statements.exists.get(id)) {
-        throw new DomainError(`An item with ID ${id} already exists`);
+        throw new DomainError(`An item with ID ${id} is already exists`);
       }
 
       this.statements.insert.run(id);
