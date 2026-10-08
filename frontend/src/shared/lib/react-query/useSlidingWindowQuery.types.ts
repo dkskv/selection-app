@@ -40,7 +40,7 @@ export interface UseSlidingWindowQueryResult<TPage, TPageParam> {
   loadNextPage: () => Promise<void>;
   /** Загружает предыдущую страницу. */
   loadPreviousPage: () => Promise<void>;
-  /** Повторно загружает страницы текущего окна. */
+  /** Параллельно загружает страницы окна; данные обновляются по мере изменения кеша. */
   refresh: () => Promise<void>;
   /** Сразу показывает состояние обновления без запуска запросов. */
   scheduleRefresh: () => void;

@@ -1,5 +1,6 @@
 import {
   hashKey,
+  type InfiniteData,
   type QueryClient,
   type QueryKey,
 } from '@tanstack/react-query';
@@ -15,11 +16,6 @@ export type WindowState<TPageParam> = {
 export type PageEntry<TPage, TPageParam> = {
   pageParam: TPageParam;
   page: TPage;
-};
-
-export type PagesState<TPage, TPageParam> = {
-  queryHash: string;
-  pageEntries: PageEntry<TPage, TPageParam>[] | undefined;
 };
 
 /** Удаляет страницы выборок по префиксу, сохраняя все страницы текущего ключа. */
@@ -91,5 +87,33 @@ export function getWindowEdgePageParams<TPage, TPageParam>(
   return {
     next: getNextPageParam(pages.at(-1)!, pages),
     previous: getPreviousPageParam(pages[0], pages),
+  };
+}
+
+/** Стабильный снимок данных окна для useSyncExternalStore. */
+export function createWindowPageStore<TPage, TPageParam>(
+  queryClient: QueryClient,
+  queryKey: QueryKey,
+  pageParams: TPageParam[],
+) {
+  const pageHashes = new Set(pageParams.map((param) => hashKey([queryKey, param])));
+  let snapshot: InfiniteData<TPage, TPageParam> | undefined;
+
+  return {
+    subscribe: (onStoreChange: () => void) =>
+      queryClient.getQueryCache().subscribe((event) => {
+        if (pageHashes.has(event.query.queryHash)) onStoreChange();
+      }),
+    getSnapshot: () => {
+      const entries = getQueryPageEntriesByWindow<TPage, TPageParam>(queryClient, queryKey, pageParams);
+
+      if (entries === undefined) {
+        snapshot = undefined;
+      } else if (!snapshot || entries.some(({ page }, index) => page !== snapshot!.pages[index])) {
+        snapshot = { pages: entries.map(({ page }) => page), pageParams };
+      }
+
+      return snapshot;
+    },
   };
 }

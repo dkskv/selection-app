@@ -6,10 +6,10 @@ import {
 import { Button, Card, Flex, message, Typography } from 'antd';
 import MinusOutlined from '@ant-design/icons/MinusOutlined';
 import {
+  notifyManager,
   useMutation,
   useMutationState,
   useQueryClient,
-  type InfiniteData,
 } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import {
@@ -33,6 +33,7 @@ import { DropIndicator } from './DropIndicator';
 import { useReorderSelected } from '../model/useReorderSelected';
 import { getAfterIdFromPages } from '../model/getAfterIdFromPages';
 import { useSlidingWindowQuery } from '@/shared/lib/react-query/useSlidingWindowQuery';
+import { getQueryPageEntriesByWindow } from '@/shared/lib/react-query/useSlidingWindowQuery.helpers';
 
 type SlidingQuery = ReturnType<typeof useSlidingWindowQuery<ItemsPage, number>>;
 
@@ -95,37 +96,55 @@ export function SelectedList({
       itemId: number;
       afterId: number | null;
       move: ListMove;
+      pageParams: number[];
     }) => reorderSelectedItem(itemId, afterId),
-    onMutate: ({ move }) => {
-      // TODO: реализовать
-      // selectedQuery.clearOtherCaches();
+    onMutate: async ({ move, pageParams }) => {
+      const queryKey = selectedQueryKey;
 
-      const previousData =
-        queryClient.getQueryData<InfiniteData<ItemsPage, number>>(
-          selectedQueryKey,
-        );
+      // Ответ текущей загрузки не должен затереть оптимистическую перестановку.
+      await Promise.all(
+        pageParams.map((pageParam) =>
+          queryClient.cancelQueries({
+            queryKey: [queryKey, pageParam],
+            exact: true,
+          }),
+        ),
+      );
 
-      handleMove(move);
+      const previousPages = handleMove(move, pageParams);
 
-      return { previousData };
+      return { previousPages, queryKey };
     },
     onError: (error, _variables, context) => {
       messageApi.error(error.message);
 
-      if (context?.previousData) {
-        queryClient.setQueryData(selectedQueryKey, context.previousData);
+      const previousPages = context?.previousPages;
+
+      if (previousPages) {
+        notifyManager.batch(() => {
+          previousPages.forEach(({ pageParam, page }) => {
+            queryClient.setQueryData([context.queryKey, pageParam], page);
+          });
+        });
       }
     },
   });
 
   const moveSelectedItem = (move: ListMove) => {
-    const data =
-      queryClient.getQueryData<InfiniteData<ItemsPage, number>>(
-        selectedQueryKey,
-      );
+    const pageParams = selectedQuery.data?.pageParams;
+
+    if (!pageParams) return;
+
+    const entries = getQueryPageEntriesByWindow<ItemsPage, number>(
+      queryClient,
+      selectedQueryKey,
+      pageParams,
+    );
+
+    if (!entries) return;
 
     const afterId = getAfterIdFromPages(
-      data?.pages,
+      entries.map(({ page }) => page),
       Number(move.id),
       move.toIndex,
     );
@@ -134,6 +153,7 @@ export function SelectedList({
       itemId: Number(move.id),
       afterId,
       move,
+      pageParams,
     });
   };
 

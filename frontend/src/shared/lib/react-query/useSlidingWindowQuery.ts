@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   hashKey,
   CancelledError,
@@ -8,13 +8,13 @@ import {
 import { PromiseBatch } from '../async/promiseBatch';
 import { useLatest } from '../react/useLatest';
 import {
+  createWindowPageStore,
   extendAtEdge,
   getQueryPageEntriesByWindow,
   getWindowEdgePageParams,
   pageKey,
   toError,
   type Direction,
-  type PagesState,
   type WindowState,
 } from './useSlidingWindowQuery.helpers';
 import type {
@@ -43,23 +43,26 @@ export function useSlidingWindowQuery<TPage, TPageParam>(
     pageParams: [initialPageParam],
   });
 
-  /** Загруженные страницы */
-  const [pagesState, setPagesState] = useState<PagesState<TPage, TPageParam>>(
-    () => ({
-      queryHash,
-      pageEntries: getQueryPageEntriesByWindow(queryClient, queryKey, [
-        initialPageParam,
-      ]),
-    }),
+  /** При расширении сохраняем прежний состав окна до успешной загрузки. */
+  const [displayWindow, setDisplayWindow] = useState<WindowState<TPageParam> & {
+    queryKey: typeof queryKey;
+    previousData?: InfiniteData<TPage, TPageParam>;
+  }>(() => ({ queryHash, queryKey, pageParams: [initialPageParam] }));
+
+  const pageStore = useMemo(
+    () => createWindowPageStore<TPage, TPageParam>(queryClient, displayWindow.queryKey, displayWindow.pageParams),
+    [queryClient, displayWindow],
   );
 
+  const stateData = useSyncExternalStore(pageStore.subscribe, pageStore.getSnapshot, pageStore.getSnapshot);
+
   /** Актуальные значения для обработчиков, сохранённых потребителем. */
-  const latestRef = useLatest({ props, queryHash, pagesState });
+  const latestRef = useLatest({ props, queryHash, displayWindow, stateData });
 
   /** Состояние загрузки для конкретного queryKey. */
   const [requestState, setRequestState] = useState(() => ({
     queryHash,
-    isLoading: pagesState.pageEntries === undefined,
+    isLoading: stateData === undefined,
     isRefreshing: false,
     next: false,
     previous: false,
@@ -88,21 +91,22 @@ export function useSlidingWindowQuery<TPage, TPageParam>(
     });
   };
 
-  /** Положить в state страницы, актуальные на момент вызова */
-  function publishPages(
+  /** Переключить состав окна, когда все страницы доступны в кеше. */
+  function publishWindow(
     currentQueryHash: string,
     currentQueryKey: typeof queryKey,
   ): void {
     if (targetWindowRef.current.queryHash !== currentQueryHash) return;
 
-    setPagesState({
-      queryHash: currentQueryHash,
-      pageEntries: getQueryPageEntriesByWindow(
-        queryClient,
-        currentQueryKey,
-        targetWindowRef.current.pageParams,
-      ),
-    });
+    const pageParams = targetWindowRef.current.pageParams;
+
+    if (!getQueryPageEntriesByWindow(queryClient, currentQueryKey, pageParams)) return;
+
+    setDisplayWindow((current) =>
+      current.queryHash === currentQueryHash && current.pageParams === pageParams
+        ? current
+        : { ...current, queryHash: currentQueryHash, queryKey: currentQueryKey, pageParams },
+    );
   }
 
   /** Начальная загрузка и переход к новому queryKey */
@@ -124,9 +128,12 @@ export function useSlidingWindowQuery<TPage, TPageParam>(
     );
 
     if (queryChanged) {
-      if (pageEntries !== undefined) {
-        setPagesState({ queryHash: currentQueryHash, pageEntries });
-      }
+      setDisplayWindow({
+        queryHash: currentQueryHash,
+        queryKey: currentProps.queryKey,
+        pageParams,
+        previousData: latestRef.current.stateData ?? latestRef.current.displayWindow.previousData,
+      });
 
       setRequestState({
         queryHash: currentQueryHash,
@@ -139,7 +146,7 @@ export function useSlidingWindowQuery<TPage, TPageParam>(
 
     if (!pageEntries) {
       queryPage(currentProps.initialPageParam, currentProps)
-        .then(() => publishPages(currentQueryHash, currentProps.queryKey))
+        .then(() => publishWindow(currentQueryHash, currentProps.queryKey))
         .catch(handleError)
         .finally(() => {
           if (latestRef.current.queryHash === currentQueryHash) {
@@ -155,15 +162,16 @@ export function useSlidingWindowQuery<TPage, TPageParam>(
     const {
       props: currentProps,
       queryHash: currentQueryHash,
-      pagesState: currentPagesState,
+      displayWindow: currentDisplayWindow,
+      stateData: currentData,
     } = latestRef.current;
 
     const currentQueryKey = currentProps.queryKey;
-    const loadedWindowPages = currentPagesState.pageEntries?.map(({ page }) => page);
+    const loadedWindowPages = currentData?.pages;
 
     if (
       targetWindowRef.current.queryHash !== currentQueryHash ||
-      currentPagesState.queryHash !== currentQueryHash ||
+      currentDisplayWindow.queryHash !== currentQueryHash ||
       !loadedWindowPages
     )
       return;
@@ -206,7 +214,7 @@ export function useSlidingWindowQuery<TPage, TPageParam>(
 
     const pagePromise = queryPage(pageParam, currentProps);
 
-    // Если уже запущен refresh, присоединяемся к нему (для атомарного обновления state)
+    // Batch управляет составом окна, а значения страниц обновляются из кеша.
     if (refreshBatchRef.current) {
       // Публикацией, ошибками и индикаторами общего batch управляет refresh.
       await refreshBatchRef.current.add(pagePromise).collect().catch(() => {});
@@ -215,7 +223,7 @@ export function useSlidingWindowQuery<TPage, TPageParam>(
     }
 
     return pagePromise
-      .then(() => publishPages(currentQueryHash, currentQueryKey))
+      .then(() => publishWindow(currentQueryHash, currentQueryKey))
       .then(() => {
         if (latestRef.current.queryHash === currentQueryHash) {
           setRequestState((value) => ({ ...value, [direction]: false }));
@@ -257,7 +265,7 @@ export function useSlidingWindowQuery<TPage, TPageParam>(
 
     await batch
       .collect()
-      .then(() => publishPages(currentQueryHash, currentQueryKey))
+      .then(() => publishWindow(currentQueryHash, currentQueryKey))
       .catch(async (error: unknown) => {
         if (error instanceof CancelledError) return;
 
@@ -290,23 +298,7 @@ export function useSlidingWindowQuery<TPage, TPageParam>(
     setRequestState((value) => ({ ...value, isLoading: false, isRefreshing: true }));
   }
 
-  /** Данные на основе pagesState */
-  const stateData = useMemo<InfiniteData<TPage, TPageParam> | undefined>(
-    () =>
-      pagesState.pageEntries
-        ? {
-            pages: pagesState.pageEntries.map(({ page }) => page),
-            pageParams: pagesState.pageEntries.map(
-              ({ pageParam }) => pageParam,
-            ),
-          }
-        : undefined,
-    [pagesState],
-  );
-
-  /** Данные с учетом текущего queryKey */
-  const currentQueryData =
-    pagesState.queryHash === queryHash ? stateData : undefined;
+  const currentQueryData = displayWindow.queryHash === queryHash ? stateData : undefined;
 
   /** Отображаемые данные с учетом placeholderData */
   const displayData = useMemo<
@@ -315,9 +307,9 @@ export function useSlidingWindowQuery<TPage, TPageParam>(
     if (currentQueryData !== undefined) return currentQueryData;
 
     return typeof placeholderData === 'function'
-      ? placeholderData(stateData)
+      ? placeholderData(stateData ?? displayWindow.previousData)
       : placeholderData;
-  }, [currentQueryData, placeholderData, stateData]);
+  }, [currentQueryData, placeholderData, stateData, displayWindow.previousData]);
 
   const edgeParams = getWindowEdgePageParams(
     currentQueryData?.pages,
