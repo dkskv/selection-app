@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type Key } from 'react';
+import { useLayoutEffect, useMemo, useRef, type Key } from 'react';
 import {
   observeElementOffset,
   useVirtualizer,
@@ -11,7 +11,7 @@ type UseAnchoredVirtualizerArgs<T> = Pick<
   ReactVirtualizerOptions<HTMLDivElement, Element>,
   'overscan' | 'getScrollElement'
 > & {
-  items: readonly T[];
+  items: readonly T[] | undefined;
   getItemKey: (item: T) => Key;
   rowHeight: number;
 };
@@ -24,7 +24,11 @@ export function useAnchoredVirtualizer<T>({
   rowHeight,
   overscan,
 }: UseAnchoredVirtualizerArgs<T>) {
-  const keys = items.map(getItemKey);
+  const keys = useMemo(
+    () => (items === undefined ? [] : items.map(getItemKey)),
+    [items, getItemKey],
+  );
+
   const previousKeysRef = useRef<Key[]>([]);
 
   /** Актуальное (последнее полученное или программно вызванное) смещение прокрутки */

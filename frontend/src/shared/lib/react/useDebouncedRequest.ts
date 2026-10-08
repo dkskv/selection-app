@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo } from 'react';
-import debounce from 'lodash.debounce';
+import debounce from 'lodash/debounce';
 import { useLatest } from './useLatest';
 
 type UseDebouncedRequestOptions = {

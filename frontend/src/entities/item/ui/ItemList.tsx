@@ -1,4 +1,5 @@
-import { useRef, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, type ReactNode } from 'react';
+import uniqBy from 'lodash/uniqBy';
 import {
   InfiniteList,
   type InfiniteListApi,
@@ -17,6 +18,22 @@ export function ItemList({
 }) {
   const listApiRef = useRef<InfiniteListApi>(null);
 
+  const getItemKey = useCallback((item: Item) => item.id, []);
+
+  const items = useMemo(() => {
+    const pages = query.data?.pages;
+
+    if (pages === undefined) {
+      return undefined;
+    }
+
+    // На всякий случай убираем дубликаты: при параллельной загрузке страницы могут временно отражать разное состояние сервера.
+    return uniqBy(
+      pages.flatMap((page) => page.items),
+      getItemKey,
+    );
+  }, [query.data?.pages, getItemKey]);
+
   const dataVersionForScroll = useDataVersionForScroll(
     query.queryKey,
     query.data,
@@ -27,15 +44,14 @@ export function ItemList({
   return (
     <InfiniteList
       apiRef={listApiRef}
-      data={query.data}
+      items={items}
       isFetchingNextPage={query.isFetchingNextPage}
       isFetchingPreviousPage={query.isFetchingPreviousPage}
       hasNextPage={query.hasNextPage}
       hasPreviousPage={query.hasPreviousPage}
       fetchNextPage={query.fetchNextPage}
       fetchPreviousPage={query.fetchPreviousPage}
-      getItems={(page) => page.items}
-      getItemKey={(item) => item.id}
+      getItemKey={getItemKey}
       renderItem={renderItem}
     />
   );

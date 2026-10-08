@@ -1,5 +1,5 @@
 import type { Key } from 'react';
-import { clamp } from '@/shared/lib/math/clamp';
+import clamp from 'lodash/clamp';
 
 type GetScrollOffsetByAnchorArgs = {
   previousKeys: readonly Key[];
