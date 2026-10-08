@@ -1,6 +1,13 @@
-import { useImperativeHandle, useRef, type Key, type ReactNode, type Ref } from 'react';
+import {
+  useImperativeHandle,
+  useRef,
+  type Key,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import type { InfiniteData } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { Empty } from 'antd';
 import { useInfiniteListScroll } from './useInfiniteListScroll';
 import styles from './InfiniteList.module.css';
 import { ProgressLoader } from '@/shared/ui/progress-loader';
@@ -80,7 +87,9 @@ export function InfiniteList<TPage, TItem, TPageParam>({
         className={styles.scrollArea}
         onScroll={handleScroll}
       >
-        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+        <div
+          style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
+        >
           {virtualRows.map((row) => {
             return (
               <div
@@ -99,6 +108,11 @@ export function InfiniteList<TPage, TItem, TPageParam>({
             );
           })}
         </div>
+        {data !== undefined && items.length === 0 && (
+          <div className={styles.empty}>
+            <Empty />
+          </div>
+        )}
       </div>
       {isFetchingPreviousPage && (
         <div className={styles.loaderTop}>
