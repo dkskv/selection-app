@@ -49,6 +49,47 @@ export function extendAtEdge<T>(
   return extended;
 }
 
+type ExtendWindowAtEdgeArgs<T> = {
+  /** Текущее целевое окно, которое может быть изменено незавершённой загрузкой. */
+  targetPageParams: T[];
+  /** Последнее опубликованное окно, которое сейчас видит потребитель. */
+  displayedPageParams: T[];
+  /** Параметр страницы, которую добавляем к окну. */
+  pageParam: T;
+  /** Сторона окна, к которой добавляется страница. */
+  direction: Direction;
+  /** Максимальное число страниц в окне. */
+  maxCount: number;
+  /** Преобразует параметр страницы в ключ для сравнения. */
+  getKey: (pageParam: T) => string;
+};
+
+/** Выбирает окно, которое нужно продолжить при загрузке у края. */
+export function extendWindowAtEdge<T>({
+  targetPageParams,
+  displayedPageParams,
+  pageParam,
+  direction,
+  maxCount,
+  getKey,
+}: ExtendWindowAtEdgeArgs<T>): T[] {
+  const displayedEdge =
+    direction === 'next'
+      ? displayedPageParams.at(-1)
+      : displayedPageParams[0];
+
+  const targetContainsDisplayedEdge = targetPageParams.some(
+    (pageParam) =>
+      displayedEdge !== undefined && getKey(pageParam) === getKey(displayedEdge),
+  );
+
+  const basePageParams = targetContainsDisplayedEdge
+    ? targetPageParams
+    : displayedPageParams;
+
+  return extendAtEdge(basePageParams, pageParam, direction, maxCount);
+}
+
 export function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error('Failed to load pages.');
 }

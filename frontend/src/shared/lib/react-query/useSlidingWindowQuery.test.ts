@@ -654,6 +654,93 @@ describe('useSlidingWindowQuery', () => {
       ]);
     });
 
+    it.each([
+      { direction: 'next', firstFinishesFirst: true },
+      { direction: 'next', firstFinishesFirst: false },
+      { direction: 'previous', firstFinishesFirst: true },
+      { direction: 'previous', firstFinishesFirst: false },
+    ] as const)(
+      'сохраняет непрерывное полное окно при смене направления на $direction, первый запрос завершается первым: $firstFinishesFirst',
+      async ({ direction, firstFinishesFirst }) => {
+        seedPage(0, { value: 0 });
+
+        const sign = direction === 'next' ? 1 : -1;
+        const firstRequest = deferred<Page>();
+        const secondRequest = deferred<Page>();
+
+        const queryFn = vi.fn((pageParam: number) => {
+          if (pageParam === -sign) return firstRequest.promise;
+
+          if (pageParam === 3 * sign) return secondRequest.promise;
+
+          return Promise.resolve({ value: pageParam });
+        });
+
+        const { result } = renderSlidingHook(queryFn, { maxPages: 3 });
+
+        const loadForward = () => direction === 'next'
+          ? result.current.loadNextPage()
+          : result.current.loadPreviousPage();
+
+        const loadBackward = () => direction === 'next'
+          ? result.current.loadPreviousPage()
+          : result.current.loadNextPage();
+
+        await act(async () => { await loadForward(); });
+
+        await act(async () => { await loadForward(); });
+
+        const initialWindow = [0, sign, 2 * sign].sort((a, b) => a - b);
+        const expectedWindow = [sign, 2 * sign, 3 * sign].sort((a, b) => a - b);
+        let firstPromise!: Promise<void>;
+        let secondPromise!: Promise<void>;
+
+        act(() => { firstPromise = loadBackward(); });
+
+        act(() => { secondPromise = loadForward(); });
+
+        expect(result.current.data?.pageParams).toEqual(initialWindow);
+
+        if (firstFinishesFirst) {
+          await act(async () => {
+            firstRequest.resolve({ value: -sign });
+
+            await firstPromise;
+          });
+
+          expect(result.current.data?.pageParams).toEqual(initialWindow);
+        }
+
+        await act(async () => {
+          secondRequest.resolve({ value: 3 * sign });
+
+          await secondPromise;
+        });
+
+        expect(result.current.data?.pageParams).toEqual(expectedWindow);
+
+        expect(result.current.data?.pages.map((page) => page.value)).toEqual(expectedWindow);
+
+        if (!firstFinishesFirst) {
+          await act(async () => {
+            firstRequest.resolve({ value: -sign });
+
+            await firstPromise;
+          });
+        }
+
+        expect(result.current.data?.pageParams).toEqual(expectedWindow);
+
+        expect(result.current.isFetchingNextPage).toBe(false);
+
+        expect(result.current.isFetchingPreviousPage).toBe(false);
+
+        expect(queryFn.mock.calls.map(([param]) => param)).toEqual([
+          sign, 2 * sign, -sign, 3 * sign,
+        ]);
+      },
+    );
+
     it('позволяет расширяться в обоих направлениях, если в окне есть место', async () => {
       seedPage(0, { value: 0 });
 
