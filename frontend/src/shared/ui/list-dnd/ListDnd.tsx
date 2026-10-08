@@ -104,7 +104,7 @@ export function ListDnd({
     >
       {children}
       <DragOverlay dropAnimation={null}>
-        {(source) => renderOverlay(source.id)}
+        {(source) => (source.isDropping ? null : renderOverlay(source.id))}
       </DragOverlay>
     </DragDropProvider>
   );
