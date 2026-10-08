@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const idSchema = z.number().int().max(Number.MAX_SAFE_INTEGER);
+const idSchema = z.number().int();
 
 const integerParamSchema = z
   .string()
