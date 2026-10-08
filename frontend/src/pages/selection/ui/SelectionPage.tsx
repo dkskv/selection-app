@@ -6,9 +6,10 @@ import { SelectedList } from './selected-list/SelectedList';
 import { UnselectedList } from './unselected-list/UnselectedList';
 
 export function SelectionPage() {
+  const [messageApi, contextHolder] = useNotification();
+
   const [unselectedSearch, setUnselectedSearch] = useState('');
   const [selectedSearch, setSelectedSearch] = useState('');
-  const [messageApi, contextHolder] = useNotification();
 
   const onError = useCallback(
     (error: Error) => {

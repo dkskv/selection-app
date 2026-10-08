@@ -1,9 +1,9 @@
 import type { ItemsPage } from '@/entities/item';
 
-/** Возвращает ID элемента перед целевой позицией, пропуская перемещаемый элемент. */
+/** Возвращает ID элемента перед целевой позицией, исключая перемещаемый элемент. */
 export function getAfterIdFromPages(
   pages: ItemsPage[] | undefined,
-  itemId: number,
+  excludeItemId: number,
   position: number,
 ): number | null {
   if (position === 0) {
@@ -14,7 +14,7 @@ export function getAfterIdFromPages(
 
   for (const page of pages ?? []) {
     for (const item of page.items) {
-      if (item.id === itemId) {
+      if (item.id === excludeItemId) {
         continue;
       }
 

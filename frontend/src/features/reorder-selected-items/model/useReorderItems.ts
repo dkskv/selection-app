@@ -15,7 +15,7 @@ import {
   removeOtherQueryCaches,
 } from '@/shared/lib/react-query/useSlidingWindowQuery.helpers';
 import { reorderSelectedItem } from '../api/reorderSelectedItem';
-import { useReorderSelected } from './useReorderSelected';
+import { useOptimisticReorder } from './useOptimisticReorder';
 import { getAfterIdFromPages } from './getAfterIdFromPages';
 
 type ReorderMutationVariables = {
@@ -25,12 +25,13 @@ type ReorderMutationVariables = {
   pageParams: number[];
 };
 
+/** Управляет перестановкой выбранного элемента и её оптимистичным обновлением в кеше. */
 export function useReorderItems(
   query: ItemsQuery,
   onError: (error: Error) => void,
 ) {
   const queryClient = useQueryClient();
-  const handleMove = useReorderSelected(query.queryKey);
+  const applyOptimisticMove = useOptimisticReorder(query.queryKey);
   const mutationKey = ['reorder-selected-item'];
 
   const pendingItemIds = useMutationState<number>({
@@ -44,9 +45,7 @@ export function useReorderItems(
     mutationFn: ({ itemId, afterId }: ReorderMutationVariables) =>
       reorderSelectedItem(itemId, afterId),
     onMutate: async ({ move, pageParams }) => {
-      const queryKey = query.queryKey;
-
-      removeOtherQueryCaches(queryClient, itemsQueryKeys.selected, queryKey);
+      const { queryKey } = query;
 
       // Ответ текущей загрузки не должен затереть оптимистическую перестановку.
       await Promise.all(
@@ -58,9 +57,18 @@ export function useReorderItems(
         ),
       );
 
-      const previousPages = handleMove(move, pageParams);
+      const previousPages = applyOptimisticMove(move, pageParams);
 
       return { previousPages, queryKey };
+    },
+    onSuccess: (_data, _variables, context) => {
+      if (context) {
+        removeOtherQueryCaches(
+          queryClient,
+          itemsQueryKeys.selected,
+          context.queryKey,
+        );
+      }
     },
     onError: (error, _variables, context) => {
       onError(error);

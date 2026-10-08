@@ -16,7 +16,7 @@ type UseAnchoredVirtualizerArgs<T> = Pick<
   rowHeight: number;
 };
 
-/** Виртуализация строк фиксированной высоты с сохранением позиции по ключу. */
+/** Виртуализирует строки фиксированной высоты, стремясь сохранить позицию элементов при изменении данных. */
 export function useAnchoredVirtualizer<T>({
   items,
   getItemKey,

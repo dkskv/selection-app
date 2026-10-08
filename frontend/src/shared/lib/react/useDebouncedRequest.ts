@@ -8,6 +8,7 @@ type UseDebouncedRequestOptions = {
   cancelRequest?: () => void;
 };
 
+/** Планирует запрос с задержкой и отменяет таймер при размонтировании. */
 export function useDebouncedRequest({
   delay,
   request,

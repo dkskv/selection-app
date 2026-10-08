@@ -8,10 +8,11 @@ export function moveItemAcrossPages<TPage, TItem>(
   getItems: (page: TPage) => TItem[],
   setItems: (page: TPage, items: TItem[]) => TPage,
 ): TPage[] {
-  const originalItems = pages.flatMap(getItems);
-  const items = moveItem(originalItems, fromIndex, toIndex);
+  // Один плоский массив упрощает перемещение через границы страниц (в ущерб производительности).
+  const flatItems = pages.flatMap(getItems);
+  const items = moveItem(flatItems, fromIndex, toIndex);
 
-  if (items === originalItems) {
+  if (items === flatItems) {
     return pages;
   }
 

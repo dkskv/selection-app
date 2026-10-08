@@ -971,7 +971,7 @@ describe('useSlidingWindowQuery', () => {
       }
     });
 
-    it.each(['refresh', 'scheduleRefresh'] as const)(
+    it.each(['refresh', 'markRefreshScheduled'] as const)(
       '%s показывает обновление нового ключа, пока placeholder хранит старые данные',
       async (method) => {
         const keyA = [...key, 'A'];
@@ -1016,7 +1016,7 @@ describe('useSlidingWindowQuery', () => {
 
         expect(queryFn).toHaveBeenCalledTimes(method === 'refresh' ? 2 : 1);
 
-        if (method === 'scheduleRefresh') {
+        if (method === 'markRefreshScheduled') {
           act(() => {
             refreshPromise = result.current.refresh();
           });
@@ -1044,7 +1044,7 @@ describe('useSlidingWindowQuery', () => {
       },
     );
 
-    it('scheduleRefresh включает состояние обновления без запроса до вызова refresh', async () => {
+    it('markRefreshScheduled включает состояние обновления без запроса до вызова refresh', async () => {
       seedPage(0, { value: 0 });
 
       const request = deferred<Page>();
@@ -1052,7 +1052,7 @@ describe('useSlidingWindowQuery', () => {
       const { result } = renderSlidingHook(queryFn);
 
       act(() => {
-        result.current.scheduleRefresh();
+        result.current.markRefreshScheduled();
       });
 
       expect(queryFn).not.toHaveBeenCalled();
@@ -1080,7 +1080,7 @@ describe('useSlidingWindowQuery', () => {
       expect(result.current.data?.pages).toEqual([{ value: 10 }]);
     });
 
-    it('повторный scheduleRefresh не запускает лишние запросы', async () => {
+    it('повторный markRefreshScheduled не запускает лишние запросы', async () => {
       seedPage(0, { value: 0 });
 
       const request = deferred<Page>();
@@ -1088,9 +1088,9 @@ describe('useSlidingWindowQuery', () => {
       const { result } = renderSlidingHook(queryFn);
 
       act(() => {
-        result.current.scheduleRefresh();
+        result.current.markRefreshScheduled();
 
-        result.current.scheduleRefresh();
+        result.current.markRefreshScheduled();
       });
 
       expect(queryFn).not.toHaveBeenCalled();
@@ -1123,7 +1123,7 @@ describe('useSlidingWindowQuery', () => {
       const { result } = renderSlidingHook(queryFn);
 
       act(() => {
-        result.current.scheduleRefresh();
+        result.current.markRefreshScheduled();
       });
 
       expect(queryFn).not.toHaveBeenCalled();

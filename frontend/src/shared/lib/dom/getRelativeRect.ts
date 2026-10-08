@@ -1,3 +1,4 @@
+/** Возвращает положение элемента относительно контейнера в координатах его границ. */
 export function getRelativeRect(element: Element, container: Element) {
   const elementRect = element.getBoundingClientRect();
   const containerRect = container.getBoundingClientRect();

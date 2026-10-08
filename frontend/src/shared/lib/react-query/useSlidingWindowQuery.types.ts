@@ -43,7 +43,7 @@ export interface UseSlidingWindowQueryResult<TPage, TPageParam> {
   /** Параллельно загружает страницы окна; данные обновляются по мере изменения кеша. */
   refresh: () => Promise<void>;
   /** Сразу показывает состояние обновления без запуска запросов. */
-  scheduleRefresh: () => void;
+  markRefreshScheduled: () => void;
   /** Загружается ли следующая страница. */
   isFetchingNextPage: boolean;
   /** Загружается ли предыдущая страница. */

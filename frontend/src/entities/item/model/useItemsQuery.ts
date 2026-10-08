@@ -44,13 +44,15 @@ export function useItemsQuery(
     },
   });
 
-  const prepareRefresh = query.scheduleRefresh;
+  const { markRefreshScheduled } = query;
 
   const scheduleRefresh = useCallback(() => {
-    prepareRefresh();
+    // Сразу включаем индикаторы refresh
+    markRefreshScheduled();
 
+    // Планируем refresh в debounce
     scheduleRequest();
-  }, [prepareRefresh, scheduleRequest]);
+  }, [markRefreshScheduled, scheduleRequest]);
 
   return { ...query, queryKey, scheduleRefresh };
 }

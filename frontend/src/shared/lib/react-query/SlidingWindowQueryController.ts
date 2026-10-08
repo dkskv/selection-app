@@ -211,7 +211,7 @@ export class SlidingWindowQueryController<TPage, TPageParam> extends BaseStore<
 
   /** Показывает ожидающее обновление, например на время debounce, без запуска запросов. */
   @boundMethod
-  scheduleRefresh(): void {
+  markRefreshScheduled(): void {
     if (!this.isCurrentQuery(this.state.queryHash)) return;
 
     this.updateFetchState({ isLoading: false, isRefreshing: true });
@@ -228,7 +228,7 @@ export class SlidingWindowQueryController<TPage, TPageParam> extends BaseStore<
 
     if (!this.isCurrentQuery(queryHash)) return;
 
-    this.scheduleRefresh();
+    this.markRefreshScheduled();
 
     await this.queryClient.cancelQueries({ queryKey: [options.queryKey] });
 

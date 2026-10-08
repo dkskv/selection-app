@@ -8,7 +8,8 @@ import { moveItemAcrossPages } from '@/shared/lib/array';
 import { getQueryPageEntriesByWindow } from '@/shared/lib/react-query/useSlidingWindowQuery.helpers';
 import type { ListMove } from '@/shared/ui/list-dnd';
 
-export function useReorderSelected(queryKey: QueryKey) {
+/** Оптимистично перемещает выбранный элемент в кеше и возвращает снимок страниц для отката. */
+export function useOptimisticReorder(queryKey: QueryKey) {
   const queryClient = useQueryClient();
 
   return ({ fromIndex, toIndex }: ListMove, pageParams: number[]) => {
@@ -20,7 +21,6 @@ export function useReorderSelected(queryKey: QueryKey) {
 
     if (!previousPages) return undefined;
 
-    // TODO: Учесть изменение порядка элементов во время переноса: индексы могут устареть.
     const pages = moveItemAcrossPages(
       previousPages.map(({ page }) => page),
       fromIndex,

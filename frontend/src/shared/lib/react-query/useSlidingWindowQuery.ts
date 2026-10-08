@@ -66,7 +66,7 @@ export function useSlidingWindowQuery<TPage, TPageParam>(
     fetchNextPage: controller.fetchNextPage,
     fetchPreviousPage: controller.fetchPreviousPage,
     refresh: controller.refresh,
-    scheduleRefresh: controller.scheduleRefresh,
+    markRefreshScheduled: controller.markRefreshScheduled,
     isFetchingNextPage: isCurrentQuery && snapshot.isFetchingNextPage,
     isFetchingPreviousPage: isCurrentQuery && snapshot.isFetchingPreviousPage,
     isRefreshing: isCurrentQuery && snapshot.isRefreshing,
