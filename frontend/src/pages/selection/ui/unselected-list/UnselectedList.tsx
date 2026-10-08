@@ -15,7 +15,7 @@ export function UnselectedList({
   query: ItemsQuery;
   search: string;
   onSearchChange: (value: string) => void;
-  onSelectionChange: () => void;
+  onSelectionChange: () => Promise<void>;
 }) {
   const [messageApi, contextHolder] = useNotification();
 

@@ -26,11 +26,11 @@ export function SelectionPage() {
 
   const selectedQuery = useItemsQuery('selected', selectedSearch, onError);
 
-  const refreshSelection = () => {
-    unselectedQuery.scheduleRefresh();
-
-    selectedQuery.scheduleRefresh();
-  };
+  const refreshSelection = () =>
+    Promise.all([
+      unselectedQuery.scheduleRefresh(),
+      selectedQuery.scheduleRefresh(),
+    ]).then(() => undefined);
 
   return (
     <Flex vertical gap="small">

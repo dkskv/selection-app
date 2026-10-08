@@ -8,7 +8,7 @@ export function useToggleItemSelection({
   onError,
 }: {
   selected: boolean;
-  onSuccess: () => void;
+  onSuccess: () => Promise<void>;
   onError: (error: Error) => void;
 }) {
   const mutationKey = [selected ? 'deselect-item' : 'select-item'];

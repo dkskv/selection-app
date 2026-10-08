@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import { useSlidingWindowQuery } from '@/shared/lib/react-query/useSlidingWindowQuery';
 import { removeOtherQueryCaches } from '@/shared/lib/react-query/useSlidingWindowQuery.helpers';
-import { useDebouncedRequest } from '@/shared/lib/react/useDebouncedRequest';
+import { useDebouncedRefresh } from '@/shared/lib/react/useDebouncedRefresh';
 import { getItems } from '../api/getItems';
 import {
   itemsQueryKeys,
@@ -35,24 +35,15 @@ export function useItemsQuery(
     placeholderData: keepPreviousData,
   });
 
-  const { scheduleRequest } = useDebouncedRequest({
+  const scheduleRefresh = useDebouncedRefresh({
     delay: 300,
-    request: () => {
+    markRefreshScheduled: query.markRefreshScheduled,
+    refresh: () => {
       removeOtherQueryCaches(queryClient, itemsQueryKeys[selection], queryKey);
 
       return query.refresh();
     },
   });
-
-  const { markRefreshScheduled } = query;
-
-  const scheduleRefresh = useCallback(() => {
-    // Сразу включаем индикаторы refresh
-    markRefreshScheduled();
-
-    // Планируем refresh в debounce
-    scheduleRequest();
-  }, [markRefreshScheduled, scheduleRequest]);
 
   return { ...query, queryKey, scheduleRefresh };
 }
