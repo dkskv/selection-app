@@ -1,26 +1,36 @@
 import { z } from 'zod';
 
-const idSchema = z.number().int();
+const integerSchema = z.number().int();
 
-const integerParamSchema = z
+const integerUrlParamSchema = z
   .string()
   .regex(/^-?\d+$/)
   .transform(Number)
-  .pipe(idSchema);
+  .pipe(integerSchema);
 
-export const paginationSchema = z.object({
-  limit: integerParamSchema.pipe(z.number().nonnegative()).default(20),
-  offset: integerParamSchema.pipe(z.number().nonnegative()).default(0),
+const idUrlParamSchema = integerUrlParamSchema;
+
+const paginationQueryParamSchema = z
+  .string()
+  .regex(/^-?\d+$/)
+  .transform(Number)
+  .pipe(integerSchema);
+
+export const paginationQuerySchema = z.object({
+  limit: paginationQueryParamSchema.default(20),
+  offset: paginationQueryParamSchema.default(0),
 });
 
-export const itemsQuerySchema = paginationSchema.extend({
+export const itemsQuerySchema = paginationQuerySchema.extend({
   idPrefixFilter: z.string().default(''),
 });
 
-export const createItemSchema = z.object({ id: idSchema });
+export const createItemBodySchema = z.object({ id: integerSchema });
 
-export const selectItemSchema = z.object({ itemId: idSchema });
+export const selectItemBodySchema = z.object({ itemId: integerSchema });
 
-export const itemParamsSchema = z.object({ itemId: integerParamSchema });
+export const itemUrlParamsSchema = z.object({ itemId: idUrlParamSchema });
 
-export const reorderSchema = z.object({ afterId: idSchema.nullable() });
+export const reorderBodySchema = z.object({
+  afterId: integerSchema.nullable(),
+});

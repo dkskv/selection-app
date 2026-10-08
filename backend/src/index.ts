@@ -9,11 +9,11 @@ import {
   runBatchedRequest,
 } from './requestBatching.js';
 import {
-  createItemSchema,
-  itemParamsSchema,
+  createItemBodySchema,
+  itemUrlParamsSchema,
   itemsQuerySchema,
-  reorderSchema,
-  selectItemSchema,
+  reorderBodySchema,
+  selectItemBodySchema,
 } from './schemas.js';
 
 /** Инициализирует хранилище и зависимости REST-эндпоинтов. */
@@ -71,7 +71,7 @@ app.post('/api/items', async (req, res) => {
     req,
     res,
     async () => {
-      const { id } = createItemSchema.parse(req.body);
+      const { id } = createItemBodySchema.parse(req.body);
 
       await itemsRepository.create(id);
 
@@ -83,7 +83,7 @@ app.post('/api/items', async (req, res) => {
 
 app.post('/api/selection', async (req, res) => {
   await runBatchedRequest(req, res, async () => {
-    const { itemId } = selectItemSchema.parse(req.body);
+    const { itemId } = selectItemBodySchema.parse(req.body);
 
     await selectionRepository.select(itemId);
 
@@ -93,7 +93,7 @@ app.post('/api/selection', async (req, res) => {
 
 app.delete('/api/selection/:itemId', async (req, res) => {
   await runBatchedRequest(req, res, async () => {
-    const { itemId } = itemParamsSchema.parse(req.params);
+    const { itemId } = itemUrlParamsSchema.parse(req.params);
 
     await selectionRepository.deselect(itemId);
 
@@ -103,8 +103,8 @@ app.delete('/api/selection/:itemId', async (req, res) => {
 
 app.patch('/api/selection/:itemId', async (req, res) => {
   await runBatchedRequest(req, res, async () => {
-    const { itemId } = itemParamsSchema.parse(req.params);
-    const { afterId } = reorderSchema.parse(req.body);
+    const { itemId } = itemUrlParamsSchema.parse(req.params);
+    const { afterId } = reorderBodySchema.parse(req.body);
 
     await selectionRepository.reorder(itemId, afterId);
 
