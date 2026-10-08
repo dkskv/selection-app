@@ -30,7 +30,7 @@ export type UseSlidingWindowQueryOptions<TPage, TPageParam> = {
 
 /** Данные и операции для отображения и управления скользящим окном страниц. */
 export interface UseSlidingWindowQueryResult<TPage, TPageParam> {
-  /** Загруженное окно или undefined до загрузки всех его страниц. */
+  /** Отображаемое окно, placeholderData или undefined, если данных ещё нет. */
   data: InfiniteData<TPage, TPageParam> | undefined;
   /** Есть ли следующая страница. */
   hasNextPage: boolean;

@@ -5,6 +5,7 @@
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
     "types": ["vite/client"],
+    "experimentalDecorators": true,
     "paths": {
       "@/*": ["./src/*"],
       "react": ["./node_modules/@types/react", "../node_modules/@types/react"],
