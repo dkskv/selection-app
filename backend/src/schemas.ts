@@ -12,12 +12,12 @@ const idUrlParamSchema = integerUrlParamSchema;
 
 const paginationQueryParamSchema = z
   .string()
-  .regex(/^-?\d+$/)
+  .regex(/^\d+$/)
   .transform(Number)
   .pipe(integerSchema);
 
 export const paginationQuerySchema = z.object({
-  limit: paginationQueryParamSchema.default(20),
+  limit: paginationQueryParamSchema.pipe(z.number().max(100)).default(20),
   offset: paginationQueryParamSchema.default(0),
 });
 
