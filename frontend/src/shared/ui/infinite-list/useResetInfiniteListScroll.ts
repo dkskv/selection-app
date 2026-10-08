@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
-import type { InfiniteListHandle } from './InfiniteList';
+import type { InfiniteListApi } from './InfiniteList';
 
 export function useResetInfiniteListScroll(
-  listRef: RefObject<InfiniteListHandle | null>,
+  listApiRef: RefObject<InfiniteListApi | null>,
   dataVersion: string | number,
 ) {
   const previousDataVersion = useRef(dataVersion);
@@ -13,7 +13,7 @@ export function useResetInfiniteListScroll(
     previousDataVersion.current = dataVersion;
 
     if (hasChanged) {
-      listRef.current?.resetScroll();
+      listApiRef.current?.resetScroll();
     }
-  }, [dataVersion, listRef]);
+  }, [dataVersion, listApiRef]);
 }

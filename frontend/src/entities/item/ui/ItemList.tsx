@@ -1,7 +1,7 @@
 import { useRef, type ReactNode } from 'react';
 import {
   InfiniteList,
-  type InfiniteListHandle,
+  type InfiniteListApi,
   useResetInfiniteListScroll,
 } from '@/shared/ui/infinite-list';
 import type { ItemsQuery } from '../model/useItemsQuery';
@@ -15,18 +15,18 @@ export function ItemList({
   query: ItemsQuery;
   renderItem: (item: Item, index: number) => ReactNode;
 }) {
-  const listRef = useRef<InfiniteListHandle>(null);
+  const listApiRef = useRef<InfiniteListApi>(null);
 
   const dataVersionForScroll = useDataVersionForScroll(
     query.queryKey,
     query.data,
   );
 
-  useResetInfiniteListScroll(listRef, dataVersionForScroll);
+  useResetInfiniteListScroll(listApiRef, dataVersionForScroll);
 
   return (
     <InfiniteList
-      ref={listRef}
+      apiRef={listApiRef}
       data={query.data}
       isFetchingNextPage={query.isFetchingNextPage}
       isFetchingPreviousPage={query.isFetchingPreviousPage}

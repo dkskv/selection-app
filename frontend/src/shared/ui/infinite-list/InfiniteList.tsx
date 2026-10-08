@@ -13,7 +13,7 @@ import styles from './InfiniteList.module.css';
 import { ProgressLoader } from '@/shared/ui/progress-loader';
 
 export type InfiniteListProps<TPage, TItem, TPageParam> = {
-  ref?: Ref<InfiniteListHandle>;
+  apiRef?: Ref<InfiniteListApi>;
   rowHeight?: number;
   overscan?: number;
   data: InfiniteData<TPage, TPageParam> | undefined;
@@ -28,7 +28,7 @@ export type InfiniteListProps<TPage, TItem, TPageParam> = {
   renderItem: (item: TItem, index: number) => ReactNode;
 };
 
-export type InfiniteListHandle = {
+export type InfiniteListApi = {
   resetScroll: () => void;
 };
 
@@ -39,7 +39,7 @@ const ROW_HEIGHT = 40;
 const OVERSCAN = 0;
 
 export function InfiniteList<TPage, TItem, TPageParam>({
-  ref,
+  apiRef,
   rowHeight = ROW_HEIGHT,
   overscan = OVERSCAN,
   data,
@@ -64,7 +64,7 @@ export function InfiniteList<TPage, TItem, TPageParam>({
     overscan,
   });
 
-  useImperativeHandle(ref, () => ({ resetScroll }), [resetScroll]);
+  useImperativeHandle(apiRef, () => ({ resetScroll }), [resetScroll]);
 
   const virtualRows = virtualizer.getVirtualItems();
 

@@ -1,6 +1,6 @@
 export {
   InfiniteList,
-  type InfiniteListHandle,
+  type InfiniteListApi,
   type InfiniteListProps,
 } from './InfiniteList';
 
