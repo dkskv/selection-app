@@ -37,9 +37,9 @@ export interface UseSlidingWindowQueryResult<TPage, TPageParam> {
   /** Есть ли предыдущая страница. */
   hasPreviousPage: boolean;
   /** Загружает следующую страницу. */
-  loadNextPage: () => Promise<void>;
+  fetchNextPage: () => Promise<void>;
   /** Загружает предыдущую страницу. */
-  loadPreviousPage: () => Promise<void>;
+  fetchPreviousPage: () => Promise<void>;
   /** Параллельно загружает страницы окна; данные обновляются по мере изменения кеша. */
   refresh: () => Promise<void>;
   /** Сразу показывает состояние обновления без запуска запросов. */

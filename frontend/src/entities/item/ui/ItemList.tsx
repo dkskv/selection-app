@@ -32,8 +32,8 @@ export function ItemList({
       isFetchingPreviousPage={query.isFetchingPreviousPage}
       hasNextPage={query.hasNextPage}
       hasPreviousPage={query.hasPreviousPage}
-      fetchNextPage={query.loadNextPage}
-      fetchPreviousPage={query.loadPreviousPage}
+      fetchNextPage={query.fetchNextPage}
+      fetchPreviousPage={query.fetchPreviousPage}
       getItems={(page) => page.items}
       getItemKey={(item) => item.id}
       renderItem={renderItem}

@@ -290,7 +290,7 @@ describe('useSlidingWindowQuery', () => {
       expect(rendered.result.current.hasNextPage).toBe(false);
 
       await act(async () => {
-        await rendered.result.current.loadNextPage();
+        await rendered.result.current.fetchNextPage();
       });
 
       expect(queryFn).toHaveBeenCalledTimes(1);
@@ -470,7 +470,7 @@ describe('useSlidingWindowQuery', () => {
       let expandPromise!: Promise<void>;
 
       act(() => {
-        expandPromise = rendered.result.current.loadNextPage();
+        expandPromise = rendered.result.current.fetchNextPage();
       });
 
       activeKey = keyB;
@@ -547,7 +547,7 @@ describe('useSlidingWindowQuery', () => {
   });
 
   describe('расширение окна', () => {
-    it('сохранённый loadNextPage использует актуальные страницы и новый ключ', async () => {
+    it('сохранённый fetchNextPage использует актуальные страницы и новый ключ', async () => {
       const keyA = [...key, 'saved-A'];
       const keyB = [...key, 'saved-B'];
       let activeKey = keyA;
@@ -562,11 +562,11 @@ describe('useSlidingWindowQuery', () => {
 
       await flushEffects();
 
-      const loadNextPage = result.current.loadNextPage;
+      const fetchNextPage = result.current.fetchNextPage;
 
-      await act(async () => { await loadNextPage(); });
+      await act(async () => { await fetchNextPage(); });
 
-      await act(async () => { await loadNextPage(); });
+      await act(async () => { await fetchNextPage(); });
 
       expect(result.current.data?.pageParams).toEqual([0, 1, 2]);
 
@@ -578,7 +578,7 @@ describe('useSlidingWindowQuery', () => {
 
       await flushEffects();
 
-      await act(async () => { await loadNextPage(); });
+      await act(async () => { await fetchNextPage(); });
 
       expect(result.current.data?.pageParams).toEqual([0, 1]);
 
@@ -603,7 +603,7 @@ describe('useSlidingWindowQuery', () => {
       await flushEffects();
 
       await act(async () => {
-        await result.current.loadNextPage();
+        await result.current.fetchNextPage();
       });
 
       await act(async () => {
@@ -611,7 +611,7 @@ describe('useSlidingWindowQuery', () => {
       });
 
       await act(async () => {
-        await result.current.loadNextPage();
+        await result.current.fetchNextPage();
       });
 
       expect(result.current.data).toEqual({
@@ -632,19 +632,19 @@ describe('useSlidingWindowQuery', () => {
       const { result } = renderSlidingHook(queryFn, { maxPages: 2 });
 
       await act(async () => {
-        await result.current.loadNextPage();
+        await result.current.fetchNextPage();
       });
 
       expect(result.current.data?.pageParams).toEqual([0, 1]);
 
       await act(async () => {
-        await result.current.loadNextPage();
+        await result.current.fetchNextPage();
       });
 
       expect(result.current.data?.pageParams).toEqual([1, 2]);
 
       await act(async () => {
-        await result.current.loadPreviousPage();
+        await result.current.fetchPreviousPage();
       });
 
       expect(result.current.data?.pageParams).toEqual([0, 1]);
@@ -679,12 +679,12 @@ describe('useSlidingWindowQuery', () => {
         const { result } = renderSlidingHook(queryFn, { maxPages: 3 });
 
         const loadForward = () => direction === 'next'
-          ? result.current.loadNextPage()
-          : result.current.loadPreviousPage();
+          ? result.current.fetchNextPage()
+          : result.current.fetchPreviousPage();
 
         const loadBackward = () => direction === 'next'
-          ? result.current.loadPreviousPage()
-          : result.current.loadNextPage();
+          ? result.current.fetchPreviousPage()
+          : result.current.fetchNextPage();
 
         await act(async () => { await loadForward(); });
 
@@ -761,9 +761,9 @@ describe('useSlidingWindowQuery', () => {
       let previousPromise!: Promise<void>;
 
       act(() => {
-        nextPromise = result.current.loadNextPage();
+        nextPromise = result.current.fetchNextPage();
 
-        previousPromise = result.current.loadPreviousPage();
+        previousPromise = result.current.fetchPreviousPage();
       });
 
       expect(result.current.isFetchingNextPage).toBe(true);
@@ -807,9 +807,9 @@ describe('useSlidingWindowQuery', () => {
       let repeatedExpand!: Promise<void>;
 
       act(() => {
-        firstExpand = result.current.loadNextPage();
+        firstExpand = result.current.fetchNextPage();
 
-        repeatedExpand = result.current.loadNextPage();
+        repeatedExpand = result.current.fetchNextPage();
       });
 
       expect(queryFn.mock.calls.map(([pageParam]) => pageParam)).toEqual([1]);
@@ -844,7 +844,7 @@ describe('useSlidingWindowQuery', () => {
         const { result } = renderSlidingHook(queryFn, { onError });
 
         await act(async () => {
-          await result.current.loadNextPage();
+          await result.current.fetchNextPage();
         });
 
         const oldData = result.current.data;
@@ -863,7 +863,7 @@ describe('useSlidingWindowQuery', () => {
 
         let expandPromise!: Promise<void>;
 
-        act(() => { expandPromise = result.current.loadNextPage(); });
+        act(() => { expandPromise = result.current.fetchNextPage(); });
 
         await flushEffects();
 
@@ -1146,7 +1146,7 @@ describe('useSlidingWindowQuery', () => {
       const { result } = renderSlidingHook(queryFn);
 
       await act(async () => {
-        await result.current.loadNextPage();
+        await result.current.fetchNextPage();
       });
 
       isRefreshing = true;
@@ -1210,7 +1210,7 @@ describe('useSlidingWindowQuery', () => {
       let expandPromise!: Promise<void>;
 
       act(() => {
-        expandPromise = result.current.loadNextPage();
+        expandPromise = result.current.fetchNextPage();
       });
 
       await flushEffects();
@@ -1273,7 +1273,7 @@ describe('useSlidingWindowQuery', () => {
       let expandPromise!: Promise<void>;
 
       act(() => {
-        expandPromise = result.current.loadNextPage();
+        expandPromise = result.current.fetchNextPage();
       });
 
       await flushEffects();
@@ -1367,8 +1367,8 @@ describe('useSlidingWindowQuery', () => {
         const { result } = renderSlidingHook(queryFn, { maxPages: 1, onError });
 
         const loadPage = () => direction === 'next'
-          ? result.current.loadNextPage()
-          : result.current.loadPreviousPage();
+          ? result.current.fetchNextPage()
+          : result.current.fetchPreviousPage();
 
         const isFetching = () => direction === 'next'
           ? result.current.isFetchingNextPage
