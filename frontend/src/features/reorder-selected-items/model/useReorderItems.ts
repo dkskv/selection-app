@@ -1,9 +1,14 @@
 import {
   notifyManager,
   useMutation,
+  useMutationState,
   useQueryClient,
 } from '@tanstack/react-query';
-import { itemsQueryKeys, type ItemsPage, type ItemsQuery } from '@/entities/item';
+import {
+  itemsQueryKeys,
+  type ItemsPage,
+  type ItemsQuery,
+} from '@/entities/item';
 import type { ListMove } from '@/shared/ui/list-dnd';
 import {
   getQueryPageEntriesByWindow,
@@ -13,23 +18,31 @@ import { reorderSelectedItem } from '../api/reorderSelectedItem';
 import { useReorderSelected } from './useReorderSelected';
 import { getAfterIdFromPages } from './getAfterIdFromPages';
 
+type ReorderMutationVariables = {
+  itemId: number;
+  afterId: number | null;
+  move: ListMove;
+  pageParams: number[];
+};
+
 export function useReorderItems(
   query: ItemsQuery,
   onError: (error: Error) => void,
 ) {
   const queryClient = useQueryClient();
   const handleMove = useReorderSelected(query.queryKey);
+  const mutationKey = ['reorder-selected-item'];
+
+  const pendingItemIds = useMutationState<number>({
+    filters: { mutationKey, status: 'pending' },
+    select: (mutation) =>
+      (mutation.state.variables as ReorderMutationVariables).itemId,
+  });
 
   const reorderMutation = useMutation({
-    mutationFn: ({
-      itemId,
-      afterId,
-    }: {
-      itemId: number;
-      afterId: number | null;
-      move: ListMove;
-      pageParams: number[];
-    }) => reorderSelectedItem(itemId, afterId),
+    mutationKey,
+    mutationFn: ({ itemId, afterId }: ReorderMutationVariables) =>
+      reorderSelectedItem(itemId, afterId),
     onMutate: async ({ move, pageParams }) => {
       const queryKey = query.queryKey;
 
@@ -91,5 +104,5 @@ export function useReorderItems(
     });
   };
 
-  return { moveSelectedItem, reorderMutation };
+  return { moveSelectedItem, pendingItemIds };
 }

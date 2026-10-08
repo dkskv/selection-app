@@ -32,7 +32,8 @@ export function SelectedList({
     onError,
   });
 
-  const { moveSelectedItem, reorderMutation } = useReorderItems(query, onError);
+  const { moveSelectedItem, pendingItemIds: pendingReorderItemIds } =
+    useReorderItems(query, onError);
 
   return (
     <ListPanel
@@ -64,10 +65,7 @@ export function SelectedList({
                     <DragHandle
                       ref={handleRef}
                       label={`Move ${item.id}`}
-                      loading={
-                        reorderMutation.isPending &&
-                        reorderMutation.variables.itemId === item.id
-                      }
+                      loading={pendingReorderItemIds.includes(item.id)}
                     />
                   }
                 />
