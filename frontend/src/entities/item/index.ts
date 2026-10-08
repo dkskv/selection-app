@@ -2,16 +2,14 @@ export type { Item, ItemsPage } from './model/types';
 
 export { getItems } from './api/getItems';
 
-export { createItem } from './api/createItem';
-
-export { selectItem } from './api/selectItem';
-
-export { deselectItem } from './api/deselectItem';
-
-export { reorderSelectedItem } from './api/reorderSelectedItem';
-
 export {
   itemsQueryKeys,
   getNextItemsPageParam,
   getPreviousItemsPageParam,
 } from './api/queries';
+
+export { useItemsQuery, type ItemsQuery } from './model/useItemsQuery';
+
+export { ItemList } from './ui/ItemList';
+
+export { ItemRow } from './ui/ItemRow';

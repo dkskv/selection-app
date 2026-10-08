@@ -1,4 +1,8 @@
-import { notifyManager, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import {
+  notifyManager,
+  useQueryClient,
+  type QueryKey,
+} from '@tanstack/react-query';
 import type { ItemsPage } from '@/entities/item';
 import { moveItemAcrossPages } from '@/shared/lib/array';
 import { getQueryPageEntriesByWindow } from '@/shared/lib/react-query/useSlidingWindowQuery.helpers';
@@ -9,7 +13,9 @@ export function useReorderSelected(queryKey: QueryKey) {
 
   return ({ fromIndex, toIndex }: ListMove, pageParams: number[]) => {
     const previousPages = getQueryPageEntriesByWindow<ItemsPage, number>(
-      queryClient, queryKey, pageParams,
+      queryClient,
+      queryKey,
+      pageParams,
     );
 
     if (!previousPages) return undefined;

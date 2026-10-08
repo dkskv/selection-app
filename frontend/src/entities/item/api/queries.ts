@@ -1,4 +1,4 @@
-import type { ItemsPage } from '@/entities/item/model/types';
+import type { ItemsPage } from '../model/types';
 
 export const itemsQueryKeys = {
   selected: ['items', 'selected'],
