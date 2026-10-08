@@ -14,7 +14,7 @@ export const paginationSchema = z.object({
 });
 
 export const itemsQuerySchema = paginationSchema.extend({
-  idPrefixFilter: z.string().regex(/^\d*$/).default(''),
+  idPrefixFilter: z.string().default(''),
 });
 
 export const createItemSchema = z.object({ id: idSchema });
