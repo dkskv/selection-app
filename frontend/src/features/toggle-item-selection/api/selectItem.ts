@@ -1,5 +1,7 @@
+import { apiBaseUrl } from '@/shared/api/apiBaseUrl';
+
 export async function selectItem(itemId: number): Promise<void> {
-  const response = await fetch('/api/selection', {
+  const response = await fetch(`${apiBaseUrl}/api/selection`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ itemId }),

@@ -1,5 +1,7 @@
+import { apiBaseUrl } from '@/shared/api/apiBaseUrl';
+
 export async function deselectItem(itemId: number): Promise<void> {
-  const response = await fetch(`/api/selection/${itemId}`, {
+  const response = await fetch(`${apiBaseUrl}/api/selection/${itemId}`, {
     method: 'DELETE',
   });
 

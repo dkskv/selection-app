@@ -13,6 +13,7 @@
   "dependencies": {
     "express": "^5.2.1",
     "fractional-indexing": "^4.0.0",
+    "http2-express": "^1.1.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
